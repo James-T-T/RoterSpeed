@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>RoterSpeed V1.2.3 FrameFix</title>
+<title>RoterSpeed V1.2.4 SafariFix</title>
 <style>
 :root{font-family:"Microsoft JhengHei",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark}
 *{box-sizing:border-box}body{margin:0;background:#0b0b0c;color:#f4f4f4}
@@ -28,8 +28,8 @@ canvas{width:100%;height:190px;background:#090909;border-radius:10px}
 </head>
 <body>
 <div class="wrap">
-<h1>RoterSpeed V1.2.3 FrameFix</h1>
-<div class="sub">真實影格去重｜Pulse Peak + FFT + AutoCorr｜Safari HTML 測試版</div>
+<h1>RoterSpeed V1.2.4 SafariFix</h1>
+<div class="sub">iPhone Safari 專用取樣修正｜RAF Sampling｜Pulse + FFT + AutoCorr</div>
 
 <div class="card">
   <div class="vbox" id="vbox"><video id="video" autoplay playsinline muted></video><div id="roi"></div></div>
@@ -44,18 +44,18 @@ canvas{width:100%;height:190px;background:#090909;border-radius:10px}
     <label>分析窗 <input id="win" type="range" min="1.5" max="6" step="0.5" value="3.0"></label>
     <span id="winText">3.0 s</span>
   </div>
-  <div class="note">你的波形已經很適合脈衝計數。這版會確保一個真實 video frame 只分析一次。</div>
+  <div class="note">這版不使用 Safari 可能不穩定的 video-frame callback，改用螢幕刷新迴圈取樣。正常情況 FPS 應約 50–60。</div>
 </div>
 
 <div class="card grid">
   <div class="metric"><div class="k">Final RPM</div><div class="v big" id="rpm">--</div><div class="s" id="rpmMode">等待穩定訊號</div></div>
-  <div class="metric"><div class="k">Pulse RPM</div><div class="v" id="peakRpm">--</div><div class="s">尖峰事件計數</div></div>
+  <div class="metric"><div class="k">Pulse RPM</div><div class="v" id="peakRpm">--</div><div class="s">尖峰事件</div></div>
   <div class="metric"><div class="k">FFT RPM</div><div class="v" id="fftRpm">--</div><div class="s">頻域</div></div>
   <div class="metric"><div class="k">AutoCorr RPM</div><div class="v" id="acRpm">--</div><div class="s">自相關</div></div>
 </div>
 
 <div class="card grid">
-  <div class="metric"><div class="k">Actual FPS</div><div class="v" id="fps">--</div><div class="s" id="drop">Dropped --</div></div>
+  <div class="metric"><div class="k">Sampling FPS</div><div class="v" id="fps">--</div><div class="s">RAF 實際取樣率</div></div>
   <div class="metric"><div class="k">Samples / Expected</div><div class="v" id="sampleRatio">--</div><div class="s">應接近 1.00</div></div>
   <div class="metric"><div class="k">Signal Amp</div><div class="v" id="amp">--</div><div class="s" id="ampState">--</div></div>
   <div class="metric"><div class="k">Recommended Max</div><div class="v" id="safeLimit">--</div><div class="s">rpm</div></div>
@@ -63,7 +63,7 @@ canvas{width:100%;height:190px;background:#090909;border-radius:10px}
 
 <div class="card">
   <canvas id="signal" width="900" height="220"></canvas>
-  <div class="note">白線＝ROI 亮度。紅色短線＝程式抓到的旋轉脈衝。</div>
+  <div class="note">白線＝ROI 亮度；紅色短線＝偵測到的旋轉脈衝。</div>
 </div>
 
 <div class="card">
@@ -78,9 +78,9 @@ const video=$('video'),roi=$('roi'),vbox=$('vbox');
 const off=document.createElement('canvas'),ox=off.getContext('2d',{willReadFrequently:true});
 const sig=$('signal'),gx=sig.getContext('2d');
 
-let stream=null,running=false,samples=[],frameTimes=[],analysisWindow=3.0;
+let stream=null,running=false,samples=[],tickTimes=[],analysisWindow=3.0;
 let drag=false,dx=0,dy=0;
-let loopGeneration=0,lastMediaTime=-1,lastPresentedFrames=-1;
+let loopGeneration=0,lastSamplePerf=0;
 
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 const mean=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
@@ -104,92 +104,140 @@ roi.addEventListener('pointermove',e=>{
  roi.style.left=clamp(e.clientX-b.left-dx,0,b.width-roi.offsetWidth)+'px';
  roi.style.top=clamp(e.clientY-b.top-dy,0,b.height-roi.offsetHeight)+'px';
 });
-roi.addEventListener('pointerup',()=>drag=false);roi.addEventListener('pointercancel',()=>drag=false);
+roi.addEventListener('pointerup',()=>drag=false);
+roi.addEventListener('pointercancel',()=>drag=false);
 
 async function startCamera(){
  loopGeneration++;
  running=false;
  if(stream)stream.getTracks().forEach(t=>t.stop());
- samples=[];frameTimes=[];lastMediaTime=-1;lastPresentedFrames=-1;
+ samples=[];tickTimes=[];lastSamplePerf=0;
  stream=await navigator.mediaDevices.getUserMedia({
   video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:60,max:60}},
   audio:false
  });
- video.srcObject=stream;await video.play();
+ video.srcObject=stream;
+ await video.play();
  running=true;
- const myGen=loopGeneration;
- schedule(myGen);
+ const gen=loopGeneration;
+ requestAnimationFrame(ts=>loop(ts,gen));
 }
-$('start').onclick=async()=>{try{if(!isSecureContext)throw new Error('請用 HTTPS 開啟');await startCamera()}catch(e){alert('相機失敗：'+e.message)}};
-$('stop').onclick=()=>{loopGeneration++;running=false;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null};
-$('reset').onclick=()=>{samples=[];frameTimes=[];$('rpm').textContent=$('peakRpm').textContent=$('fftRpm').textContent=$('acRpm').textContent='--'};
+
+$('start').onclick=async()=>{
+ try{
+  if(!isSecureContext)throw new Error('請用 HTTPS 開啟');
+  await startCamera();
+ }catch(e){alert('相機失敗：'+e.message)}
+};
+$('stop').onclick=()=>{
+ loopGeneration++;
+ running=false;
+ if(stream)stream.getTracks().forEach(t=>t.stop());
+ stream=null;
+};
+$('reset').onclick=()=>{
+ samples=[];tickTimes=[];
+ $('rpm').textContent=$('peakRpm').textContent=$('fftRpm').textContent=$('acRpm').textContent='--';
+};
 
 function readROI(){
- if(!video.videoWidth)return null;
- off.width=video.videoWidth;off.height=video.videoHeight;ox.drawImage(video,0,0,off.width,off.height);
+ if(!video.videoWidth||video.readyState<2)return null;
+ off.width=video.videoWidth;
+ off.height=video.videoHeight;
+ ox.drawImage(video,0,0,off.width,off.height);
+
  const vb=video.getBoundingClientRect(),rr=roi.getBoundingClientRect();
  let sx=clamp(Math.floor((rr.left-vb.left)/vb.width*off.width),0,off.width-2);
  let sy=clamp(Math.floor((rr.top-vb.top)/vb.height*off.height),0,off.height-2);
  let sw=clamp(Math.floor(rr.width/vb.width*off.width),2,off.width-sx);
  let sh=clamp(Math.floor(rr.height/vb.height*off.height),2,off.height-sy);
- const d=ox.getImageData(sx,sy,sw,sh).data;let sum=0,n=0;
- for(let i=0;i<d.length;i+=16){sum+=.2126*d[i]+.7152*d[i+1]+.0722*d[i+2];n++}
- return sum/n;
+
+ const d=ox.getImageData(sx,sy,sw,sh).data;
+ let sum=0,n=0;
+ for(let i=0;i<d.length;i+=16){
+  sum+=.2126*d[i]+.7152*d[i+1]+.0722*d[i+2];
+  n++;
+ }
+ return n?sum/n:null;
 }
 
 function pulseEstimate(arr,maxRPM){
  if(arr.length<20)return null;
- const v=arr.map(p=>p.y),base=percentile(v,.40),top=percentile(v,.92);
- const amp=top-base;if(amp<3)return null;
- const threshold=base+amp*.55;
- const minGap=60/Math.max(200,maxRPM)*0.60;
+ const v=arr.map(p=>p.y);
+ const base=percentile(v,.35),top=percentile(v,.90);
+ const amp=top-base;
+ if(amp<3)return null;
+
+ const threshold=base+amp*.52;
+ const release=base+amp*.22;
+ const minGap=60/Math.max(200,maxRPM)*0.55;
+
  let events=[],armed=true;
  for(let i=1;i<v.length-1;i++){
-  const isLocalMax=v[i]>=v[i-1]&&v[i]>=v[i+1];
-  if(armed&&isLocalMax&&v[i]>=threshold){
+  const localMax=v[i]>=v[i-1]&&v[i]>=v[i+1];
+  if(armed&&localMax&&v[i]>=threshold){
    if(!events.length||arr[i].t-events.at(-1).t>=minGap){
     events.push({t:arr[i].t,i});
     armed=false;
    }
   }
-  if(!armed&&v[i]<base+amp*.25)armed=true;
+  if(!armed&&v[i]<=release)armed=true;
  }
- if(events.length<3)return {rpm:null,count:events.length,events,threshold,base,amp};
- let d=[];for(let i=1;i<events.length;i++)d.push(events[i].t-events[i-1].t);
+
+ if(events.length<3)return {rpm:null,count:events.length,events,amp};
+ let d=[];
+ for(let i=1;i<events.length;i++)d.push(events[i].t-events[i-1].t);
  const med=median(d);
  const good=d.filter(x=>Math.abs(x-med)/med<.30);
- if(good.length<2)return {rpm:null,count:events.length,events,threshold,base,amp};
- return {rpm:60/mean(good),count:events.length,events,threshold,base,amp};
+ if(good.length<2)return {rpm:null,count:events.length,events,amp};
+ return {rpm:60/mean(good),count:events.length,events,amp};
 }
 
 function detrend(x){
  const n=x.length;if(n<3)return x;
  let sx=0,sy=0,sxx=0,sxy=0;
  for(let i=0;i<n;i++){sx+=i;sy+=x[i];sxx+=i*i;sxy+=i*x[i]}
- const den=n*sxx-sx*sx||1,a=(n*sxy-sx*sy)/den,b=(sy-a*sx)/n;
+ const den=n*sxx-sx*sx||1;
+ const a=(n*sxy-sx*sy)/den,b=(sy-a*sx)/n;
  return x.map((v,i)=>v-(a*i+b));
 }
 
 function fftEstimate(arr,maxRPM){
  if(arr.length<64)return null;
- const span=arr.at(-1).t-arr[0].t;if(span<=0)return null;
+ const span=arr.at(-1).t-arr[0].t;
+ if(span<=0)return null;
  const fs=(arr.length-1)/span;
- let N=1<<Math.floor(Math.log2(Math.min(arr.length,256)));if(N<64)return null;
- let x=detrend(arr.slice(-N).map(p=>p.y)),m=mean(x);x=x.map(v=>v-m);
+
+ let N=1<<Math.floor(Math.log2(Math.min(arr.length,256)));
+ if(N<64)return null;
+ let x=detrend(arr.slice(-N).map(p=>p.y));
+ const m=mean(x);
+ x=x.map(v=>v-m);
+
  for(let i=0;i<N;i++)x[i]*=(.5-.5*Math.cos(2*Math.PI*i/(N-1)));
+
  const minHz=1,maxHz=Math.min(maxRPM/60,fs/2.2);
- let k0=Math.max(1,Math.ceil(minHz*N/fs)),k1=Math.min(Math.floor(maxHz*N/fs),N/2-2);
+ const k0=Math.max(1,Math.ceil(minHz*N/fs));
+ const k1=Math.min(Math.floor(maxHz*N/fs),N/2-2);
  if(k1<=k0)return null;
+
  let mags=[],bk=0,bm=-1;
  for(let k=k0;k<=k1;k++){
   let re=0,im=0;
-  for(let n=0;n<N;n++){const a=2*Math.PI*k*n/N;re+=x[n]*Math.cos(a);im-=x[n]*Math.sin(a)}
-  const q=re*re+im*im;mags[k]=q;if(q>bm){bm=q;bk=k}
+  for(let n=0;n<N;n++){
+   const a=2*Math.PI*k*n/N;
+   re+=x[n]*Math.cos(a);im-=x[n]*Math.sin(a);
+  }
+  const q=re*re+im*im;
+  mags[k]=q;
+  if(q>bm){bm=q;bk=k}
  }
+
  if(!bk)return null;
  let kr=bk;
  if(bk>k0&&bk<k1){
-  const a=mags[bk-1]||0,b=mags[bk]||0,c=mags[bk+1]||0,den=a-2*b+c;
+  const a=mags[bk-1]||0,b=mags[bk]||0,c=mags[bk+1]||0;
+  const den=a-2*b+c;
   if(Math.abs(den)>1e-12)kr=bk+clamp(.5*(a-c)/den,-.5,.5);
  }
  return {rpm:kr*fs/N*60,fs};
@@ -197,26 +245,46 @@ function fftEstimate(arr,maxRPM){
 
 function acEstimate(arr,maxRPM){
  if(arr.length<40)return null;
- const span=arr.at(-1).t-arr[0].t;if(span<=0)return null;
+ const span=arr.at(-1).t-arr[0].t;
+ if(span<=0)return null;
  const fs=(arr.length-1)/span;
- let x=detrend(arr.map(p=>p.y)),m=mean(x);x=x.map(v=>v-m);
+
+ let x=detrend(arr.map(p=>p.y));
+ const m=mean(x);x=x.map(v=>v-m);
+
  const minLag=Math.max(2,Math.floor(fs/(maxRPM/60)));
  const maxLag=Math.min(Math.floor(x.length/2),Math.ceil(fs/1));
+
  let best=-2,bl=0;
  for(let lag=minLag;lag<=maxLag;lag++){
   let num=0,a=0,b=0;
-  for(let i=lag;i<x.length;i++){num+=x[i]*x[i-lag];a+=x[i]*x[i];b+=x[i-lag]*x[i-lag]}
-  const r=num/Math.sqrt((a||1)*(b||1));if(r>best){best=r;bl=lag}
+  for(let i=lag;i<x.length;i++){
+   num+=x[i]*x[i-lag];
+   a+=x[i]*x[i];
+   b+=x[i-lag]*x[i-lag];
+  }
+  const r=num/Math.sqrt((a||1)*(b||1));
+  if(r>best){best=r;bl=lag}
  }
  return bl?{rpm:60*fs/bl,score:best}:null;
 }
 
 function draw(arr,pulse){
- gx.clearRect(0,0,sig.width,sig.height);if(arr.length<2)return;
- const v=arr.map(p=>p.y);let mn=percentile(v,.02),mx=percentile(v,.98);if(mx-mn<1)mx=mn+1;
+ gx.clearRect(0,0,sig.width,sig.height);
+ if(arr.length<2)return;
+
+ const v=arr.map(p=>p.y);
+ let mn=percentile(v,.02),mx=percentile(v,.98);
+ if(mx-mn<1)mx=mn+1;
+
  gx.beginPath();
- arr.forEach((p,i)=>{const x=i/(arr.length-1)*sig.width,y=sig.height-(clamp(p.y,mn,mx)-mn)/(mx-mn)*sig.height;i?gx.lineTo(x,y):gx.moveTo(x,y)});
+ arr.forEach((p,i)=>{
+  const x=i/(arr.length-1)*sig.width;
+  const y=sig.height-(clamp(p.y,mn,mx)-mn)/(mx-mn)*sig.height;
+  i?gx.lineTo(x,y):gx.moveTo(x,y);
+ });
  gx.strokeStyle='#fff';gx.lineWidth=2;gx.stroke();
+
  if(pulse?.events){
   gx.strokeStyle='#ff7070';gx.lineWidth=2;
   for(const e of pulse.events){
@@ -226,67 +294,65 @@ function draw(arr,pulse){
  }
 }
 
-function handleFrame(now,meta){
- // hard deduplication: one real media frame only
- if(meta){
-  if(Number.isFinite(meta.mediaTime)&&meta.mediaTime===lastMediaTime)return;
-  if(Number.isFinite(meta.presentedFrames)&&meta.presentedFrames===lastPresentedFrames)return;
-  if(Number.isFinite(meta.mediaTime))lastMediaTime=meta.mediaTime;
-  if(Number.isFinite(meta.presentedFrames))lastPresentedFrames=meta.presentedFrames;
- }
+function analyze(){
+ if(samples.length<2)return;
 
- const y=readROI();if(y==null)return;
- const t=(meta&&Number.isFinite(meta.mediaTime))?meta.mediaTime:performance.now()/1000;
- if(samples.length&&t<=samples.at(-1).t)return; // prevent duplicate / non-monotonic samples
- samples.push({t,y});samples=samples.filter(p=>t-p.t<=8);
-
- const pn=performance.now();frameTimes.push(pn);frameTimes=frameTimes.filter(x=>pn-x<3000);
- const fps=frameTimes.length>1?(frameTimes.length-1)/((frameTimes.at(-1)-frameTimes[0])/1000):0;
-
- const arr=samples.filter(p=>t-p.t<=analysisWindow);
+ const now=samples.at(-1).t;
+ const arr=samples.filter(p=>now-p.t<=analysisWindow);
  const vals=arr.map(p=>p.y);
- const amp=vals.length?percentile(vals,.90)-percentile(vals,.10):0;
 
+ const fps=tickTimes.length>1
+  ?(tickTimes.length-1)/((tickTimes.at(-1)-tickTimes[0])/1000)
+  :0;
+
+ const amp=vals.length?percentile(vals,.90)-percentile(vals,.10):0;
  const safeMax=fps?Math.floor(fps*60/2.5):0;
  const maxRPM=Math.max(300,Math.min(1800,safeMax||1200));
 
- const p=pulseEstimate(arr,maxRPM),f=fftEstimate(arr,maxRPM),a=acEstimate(arr,maxRPM);
+ const p=pulseEstimate(arr,maxRPM);
+ const f=fftEstimate(arr,maxRPM);
+ const a=acEstimate(arr,maxRPM);
+
  const pr=p?.rpm,fr=f?.rpm,ar=a?.rpm;
  let display=null,mode='等待穩定訊號';
 
  const candidates=[pr,fr,ar].filter(v=>v&&isFinite(v)).sort((x,y)=>x-y);
+
  if(candidates.length>=2){
-  // choose closest pair
-  let best=[candidates[0],candidates[1]],bd=Math.abs(best[1]-best[0]);
-  for(let i=0;i<candidates.length;i++)for(let j=i+1;j<candidates.length;j++){
-   const d=Math.abs(candidates[j]-candidates[i]);
-   if(d<bd){bd=d;best=[candidates[i],candidates[j]]}
+  let best=[candidates[0],candidates[1]];
+  let bd=Math.abs(best[1]-best[0]);
+  for(let i=0;i<candidates.length;i++){
+   for(let j=i+1;j<candidates.length;j++){
+    const d=Math.abs(candidates[j]-candidates[i]);
+    if(d<bd){bd=d;best=[candidates[i],candidates[j]]}
+   }
   }
   display=(best[0]+best[1])/2;
   mode=bd<=10?'PASS：雙法一致':`CHECK：雙法差 ${bd.toFixed(1)} rpm`;
  }else if(candidates.length===1){
-  display=candidates[0];mode='暫估：單法';
+  display=candidates[0];
+  mode='暫估：單法';
  }
 
- $('rpm').textContent=display?Math.round(display):'--';$('rpmMode').textContent=mode;
- $('peakRpm').textContent=pr?Math.round(pr):'--';$('fftRpm').textContent=fr?Math.round(fr):'--';$('acRpm').textContent=ar?Math.round(ar):'--';
- $('fps').textContent=fps?fps.toFixed(1):'--';$('amp').textContent=amp.toFixed(1);$('ampState').textContent=amp>=12?'GOOD':amp>=5?'LOW':'TOO LOW';
+ $('rpm').textContent=display?Math.round(display):'--';
+ $('rpmMode').textContent=mode;
+ $('peakRpm').textContent=pr?Math.round(pr):'--';
+ $('fftRpm').textContent=fr?Math.round(fr):'--';
+ $('acRpm').textContent=ar?Math.round(ar):'--';
+ $('fps').textContent=fps?fps.toFixed(1):'--';
+ $('amp').textContent=amp.toFixed(1);
+ $('ampState').textContent=amp>=12?'GOOD':amp>=5?'LOW':'TOO LOW';
  $('safeLimit').textContent=safeMax||'--';
 
- const actualSpan=arr.length>1?arr.at(-1).t-arr[0].t:0;
- const expected=actualSpan*fps;
+ const span=arr.length>1?arr.at(-1).t-arr[0].t:0;
+ const expected=span*fps;
  const ratio=expected>0?arr.length/expected:0;
  $('sampleRatio').textContent=ratio?ratio.toFixed(2):'--';
 
- let drop=0;
- if(frameTimes.length>5){
-  let ints=[];for(let i=1;i<frameTimes.length;i++)ints.push(frameTimes[i]-frameTimes[i-1]);
-  const md=median(ints);drop=100*ints.filter(v=>v>1.8*md).length/ints.length;
- }
- $('drop').textContent='Dropped '+drop.toFixed(2)+' %';
-
- $('debug').textContent=`Camera: ${video.videoWidth}×${video.videoHeight}
-FPS: ${fps.toFixed(2)}
+ $('debug').textContent=
+`Camera: ${video.videoWidth}×${video.videoHeight}
+Sampling method: requestAnimationFrame
+Sampling FPS: ${fps.toFixed(2)}
 Window: ${analysisWindow.toFixed(1)} s
 Samples: ${arr.length}
 Expected samples: ${expected.toFixed(1)}
@@ -301,13 +367,25 @@ Recommended max: ${safeMax || '--'} rpm`;
  draw(arr,p);
 }
 
-function schedule(gen){
+function loop(ts,gen){
  if(!running||gen!==loopGeneration)return;
- if('requestVideoFrameCallback' in HTMLVideoElement.prototype){
-  video.requestVideoFrameCallback((n,m)=>{if(gen!==loopGeneration)return;handleFrame(n,m);schedule(gen)});
- }else{
-  requestAnimationFrame(()=>{if(gen!==loopGeneration)return;handleFrame();schedule(gen)});
+
+ // Cap roughly at display refresh, but avoid duplicate ultra-fast RAF callbacks.
+ if(!lastSamplePerf || ts-lastSamplePerf>=12){
+  lastSamplePerf=ts;
+  const y=readROI();
+  if(y!==null){
+   const t=performance.now()/1000;
+   samples.push({t,y});
+   samples=samples.filter(p=>t-p.t<=8);
+
+   tickTimes.push(performance.now());
+   tickTimes=tickTimes.filter(x=>performance.now()-x<3000);
+
+   analyze();
+  }
  }
+ requestAnimationFrame(n=>loop(n,gen));
 }
 </script>
 </body>
