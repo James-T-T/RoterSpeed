@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>RoterSpeed V1.2 HTML</title>
+<style>
+:root{font-family:"Microsoft JhengHei",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:#0b0b0c;color:#f4f4f4}
+.wrap{max-width:980px;margin:auto;padding:12px}
+h1{font-size:22px;margin:4px 0 6px}
+.sub{font-size:13px;color:#aaa;margin-bottom:10px}
+.card{background:#171719;border:1px solid #2b2b2e;border-radius:14px;padding:12px;margin-bottom:10px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.metric{background:#242427;border-radius:10px;padding:10px}
+.k{font-size:12px;color:#aaa}.v{font-size:28px;font-weight:800}.big{font-size:40px}.s{font-size:12px;color:#bbb}
+button,select,input{font:inherit}
+button{border:0;border-radius:10px;padding:10px 14px;background:#eee;color:#111;font-weight:700}
+button.secondary{background:#333;color:#eee}
+button.good{background:#174a25;color:#fff}
+button.warn{background:#5a4712;color:#fff}
+.vbox{position:relative;overflow:hidden;border-radius:12px;background:#000;touch-action:none}
+video{display:block;width:100%;background:#000}
+#roi{position:absolute;width:28px;height:120px;left:calc(50% - 14px);top:calc(50% - 60px);border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.12);touch-action:none}
+#roi:after{content:"ROI";position:absolute;left:50%;top:-24px;transform:translateX(-50%);font-size:11px;background:#fff;color:#000;padding:2px 5px;border-radius:5px}
+#axisBox{position:absolute;border:2px dashed #ffd966;display:none;pointer-events:none}
+canvas{width:100%;height:150px;background:#090909;border-radius:10px}
+.note{font-size:12px;line-height:1.55;color:#bbb}
+.sep{height:1px;background:#2b2b2e;margin:10px 0}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700}
+.pass{background:#153b21;color:#8cffab}.check{background:#4b3d12;color:#ffd966}.fail{background:#4a1919;color:#ff8f8f}
+@media(min-width:760px){.grid{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>RoterSpeed V1.2 HTML</h1>
+<div class="sub">iPhone 15｜轉軸側邊量測｜Auto Axis + Auto ROI + Peak/FFT Cross-check + CSV Logger</div>
+
+<div class="card">
+  <div class="vbox" id="vbox">
+    <video id="video" autoplay playsinline muted></video>
+    <div id="axisBox"></div>
+    <div id="roi"></div>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button id="start">啟動相機</button>
+    <button id="stop" class="secondary">停止</button>
+    <button id="autoAxis" class="good">自動抓軸 / ROI</button>
+    <button id="reset" class="secondary">清除資料</button>
+  </div>
+  <div class="sep"></div>
+  <div class="row">
+    <label>ROI 寬 <input id="roiW" type="range" min="8" max="100" value="28"></label>
+    <label>ROI 高 <input id="roiH" type="range" min="40" max="220" value="120"></label>
+    <label>分析窗 <input id="win" type="range" min="2" max="10" value="8"></label>
+    <span id="winText">8 s</span>
+  </div>
+  <div class="note">自動抓軸會先觀察約 1.2 秒的「時間變化」，尋找畫面中週期性最強的區域，再將 ROI 移到該區。若背景也有移動，請手動拖曳 ROI 修正。</div>
+</div>
+
+<div class="card grid">
+  <div class="metric"><div class="k">Final RPM</div><div class="v big" id="rpm">--</div><div class="s">rpm</div></div>
+  <div class="metric"><div class="k">Peak Count RPM</div><div class="v" id="peakRpm">--</div><div class="s">峰值法</div></div>
+  <div class="metric"><div class="k">FFT RPM</div><div class="v" id="fftRpm">--</div><div class="s">頻域法</div></div>
+  <div class="metric"><div class="k">Cross-check</div><div class="v" id="cross">--</div><div class="s"><span id="badge" class="badge check">WAIT</span></div></div>
+</div>
+
+<div class="card grid">
+  <div class="metric"><div class="k">Actual FPS</div><div class="v" id="fps">--</div><div class="s" id="drop">Dropped --</div></div>
+  <div class="metric"><div class="k">Signal Amp</div><div class="v" id="amp">--</div><div class="s">灰階差</div></div>
+  <div class="metric"><div class="k">Auto Axis Score</div><div class="v" id="axisScore">--</div><div class="s">時間變異</div></div>
+  <div class="metric"><div class="k">Safe Limit</div><div class="v" id="safeLimit">--</div><div class="s">rpm</div></div>
+</div>
+
+<div class="card">
+  <canvas id="signal" width="900" height="180"></canvas>
+  <div class="note">白色：ROI 亮度訊號。Final RPM 只有在 Peak 與 FFT 差異合理時才採用。</div>
+</div>
+
+<div class="card">
+  <div class="row">
+    <button id="logStart" class="good">開始 CSV 紀錄</button>
+    <button id="logStop" class="secondary">停止紀錄</button>
+    <button id="downloadCsv" class="secondary">下載 CSV</button>
+    <button id="clearCsv" class="secondary">清除 CSV</button>
+  </div>
+  <div class="note" id="logState" style="margin-top:8px">CSV：未紀錄</div>
+</div>
+
+<div class="card">
+  <b>相機環境診斷</b>
+  <div class="note" id="diag" style="margin-top:6px"></div>
+</div>
+</div>
+
+<script>
+const video=document.getElementById('video'), roi=document.getElementById('roi'), axisBox=document.getElementById('axisBox'), vbox=document.getElementById('vbox');
+const off=document.createElement('canvas'), ox=off.getContext('2d',{willReadFrequently:true});
+const sig=document.getElementById('signal'), gx=sig.getContext('2d');
+let stream=null,running=false,samples=[],frameTimes=[],analysisWindow=8;
+let drag=false,dx=0,dy=0;
+let csv=[],logging=false,lastLog=0;
+let autoFrames=[],autoCollecting=false,autoStart=0;
+
+const $=id=>document.getElementById(id);
+function clamp(v,a,b){return Math.min(b,Math.max(a,v))}
+function mean(a){return a.length?a.reduce((s,v)=>s+v,0)/a.length:0}
+function median(a){if(!a.length)return 0;const b=[...a].sort((x,y)=>x-y);return b[Math.floor(b.length/2)]}
+function diag(){ $('diag').innerHTML=`Protocol：${location.protocol}<br>Secure Context：${isSecureContext?'YES':'NO'}<br>getUserMedia：${navigator.mediaDevices?.getUserMedia?'可用':'不可用'}<br>${(!isSecureContext||!navigator.mediaDevices?.getUserMedia)?'<b>請使用 HTTPS 網址開啟。</b>':'可要求相機權限。'}` } diag();
+
+$('roiW').oninput=e=>roi.style.width=e.target.value+'px';
+$('roiH').oninput=e=>roi.style.height=e.target.value+'px';
+$('win').oninput=e=>{analysisWindow=+e.target.value;$('winText').textContent=analysisWindow+' s'};
+
+roi.addEventListener('pointerdown',e=>{roi.setPointerCapture(e.pointerId);const r=roi.getBoundingClientRect();drag=true;dx=e.clientX-r.left;dy=e.clientY-r.top});
+roi.addEventListener('pointermove',e=>{if(!drag)return;const b=vbox.getBoundingClientRect();roi.style.left=clamp(e.clientX-b.left-dx,0,b.width-roi.offsetWidth)+'px';roi.style.top=clamp(e.clientY-b.top-dy,0,b.height-roi.offsetHeight)+'px'});
+roi.addEventListener('pointerup',()=>drag=false);roi.addEventListener('pointercancel',()=>drag=false);
+
+$('start').onclick=async()=>{
+ try{
+  if(stream)stream.getTracks().forEach(t=>t.stop());
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:60,max:60}},audio:false});
+  video.srcObject=stream;await video.play();running=true;samples=[];frameTimes=[];scheduleFrame();
+ }catch(e){alert('相機失敗：'+e.name+' '+e.message)}
+};
+$('stop').onclick=()=>{running=false;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null};
+$('reset').onclick=()=>{samples=[];frameTimes=[];$('rpm').textContent=$('peakRpm').textContent=$('fftRpm').textContent='--'};
+$('autoAxis').onclick=()=>{autoFrames=[];autoCollecting=true;autoStart=performance.now();$('axisScore').textContent='掃描中'};
+
+$('logStart').onclick=()=>{logging=true;$('logState').textContent='CSV：紀錄中'};
+$('logStop').onclick=()=>{logging=false;$('logState').textContent=`CSV：已停止，共 ${csv.length} 筆`};
+$('clearCsv').onclick=()=>{csv=[];$('logState').textContent='CSV：已清除'};
+$('downloadCsv').onclick=()=>{
+ const head='timestamp,final_rpm,peak_rpm,fft_rpm,cross_error_rpm,fps,signal_amp\n';
+ const body=csv.map(r=>r.join(',')).join('\n');
+ const blob=new Blob([head+body],{type:'text/csv;charset=utf-8'});
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='RoterSpeed_V1.2_log.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+};
+
+function drawVideo(){if(!video.videoWidth)return false;off.width=video.videoWidth;off.height=video.videoHeight;ox.drawImage(video,0,0,off.width,off.height);return true}
+function readROI(){
+ if(!drawVideo())return null;
+ const vb=video.getBoundingClientRect(), rr=roi.getBoundingClientRect();
+ const sx=(rr.left-vb.left)/vb.width*off.width, sy=(rr.top-vb.top)/vb.height*off.height, sw=rr.width/vb.width*off.width, sh=rr.height/vb.height*off.height;
+ const d=ox.getImageData(Math.max(0,sx),Math.max(0,sy),Math.max(2,sw),Math.max(2,sh)).data;
+ let sum=0,n=0;
+ for(let i=0;i<d.length;i+=16){sum+=0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2];n++}
+ return sum/n;
+}
+function autoSample(){
+ if(!drawVideo())return;
+ const W=40,H=24;
+ const tmp=document.createElement('canvas');tmp.width=W;tmp.height=H;
+ const tx=tmp.getContext('2d',{willReadFrequently:true});tx.drawImage(video,0,0,W,H);
+ const d=tx.getImageData(0,0,W,H).data, arr=[];
+ for(let i=0;i<d.length;i+=4)arr.push(0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]);
+ autoFrames.push(arr);
+ if(performance.now()-autoStart>1200){autoCollecting=false;finishAutoAxis(W,H)}
+}
+function finishAutoAxis(W,H){
+ if(autoFrames.length<5)return;
+ const scores=new Array(W*H).fill(0);
+ for(let p=0;p<W*H;p++){
+   const vals=autoFrames.map(f=>f[p]), m=mean(vals);
+   scores[p]=vals.reduce((s,v)=>s+(v-m)*(v-m),0)/vals.length;
+ }
+ let best=0,bi=0;
+ for(let i=0;i<scores.length;i++){if(scores[i]>best){best=scores[i];bi=i}}
+ const x=bi%W,y=Math.floor(bi/W), vb=vbox.getBoundingClientRect();
+ const cx=(x+.5)/W*vb.width, cy=(y+.5)/H*vb.height;
+ const rw=roi.offsetWidth,rh=roi.offsetHeight;
+ roi.style.left=clamp(cx-rw/2,0,vb.width-rw)+'px';roi.style.top=clamp(cy-rh/2,0,vb.height-rh)+'px';
+ axisBox.style.display='block';axisBox.style.left=clamp(cx-40,0,vb.width-80)+'px';axisBox.style.top=clamp(cy-70,0,vb.height-140)+'px';axisBox.style.width='80px';axisBox.style.height='140px';
+ $('axisScore').textContent=best.toFixed(1);
+ setTimeout(()=>axisBox.style.display='none',2500);
+}
+function estimatePeak(arr){
+ if(arr.length<20)return null;
+ const vals=arr.map(p=>p.y), m=mean(vals), amp=Math.max(...vals)-Math.min(...vals), th=m+amp*0.12;
+ let peaks=[];
+ for(let i=2;i<vals.length-2;i++){
+   if(vals[i]>vals[i-1]&&vals[i]>=vals[i+1]&&vals[i]>th){
+     if(!peaks.length || arr[i].t-peaks.at(-1)>0.006)peaks.push(arr[i].t);
+   }
+ }
+ if(peaks.length<3)return null;
+ let diffs=[];for(let i=1;i<peaks.length;i++)diffs.push(peaks[i]-peaks[i-1]);
+ const dt=median(diffs.filter(v=>v>0)); if(!dt)return null;
+ return 60/dt;
+}
+function fftRpm(arr){
+ if(arr.length<64)return null;
+ const tspan=arr.at(-1).t-arr[0].t, fs=(arr.length-1)/tspan, N=1<<Math.floor(Math.log2(Math.min(arr.length,512)));
+ const x=arr.slice(-N).map(p=>p.y); const m=mean(x); for(let i=0;i<N;i++){x[i]=(x[i]-m)*(0.5-0.5*Math.cos(2*Math.PI*i/(N-1)))}
+ let bestK=0,best=0;
+ const kMin=Math.max(1,Math.floor((60/60)*N/fs)), kMax=Math.min(Math.floor((5000/60)*N/fs),Math.floor(N/2)-1);
+ for(let k=kMin;k<=kMax;k++){
+   let re=0,im=0;
+   for(let n=0;n<N;n++){const a=2*Math.PI*k*n/N;re+=x[n]*Math.cos(a);im-=x[n]*Math.sin(a)}
+   const mag=re*re+im*im;if(mag>best){best=mag;bestK=k}
+ }
+ if(!bestK)return null;
+ return (bestK*fs/N)*60;
+}
+function drawSignal(){
+ gx.clearRect(0,0,sig.width,sig.height);const a=samples.slice(-500);if(a.length<2)return;
+ const vals=a.map(p=>p.y);let mn=Math.min(...vals),mx=Math.max(...vals);if(mx-mn<1)mx=mn+1;
+ gx.beginPath();a.forEach((p,i)=>{const x=i/(a.length-1)*sig.width,y=sig.height-(p.y-mn)/(mx-mn)*sig.height;i?gx.lineTo(x,y):gx.moveTo(x,y)});gx.strokeStyle='#fff';gx.lineWidth=2;gx.stroke();
+}
+function handleFrame(now,meta){
+ const y=readROI();if(y==null)return;
+ const t=(meta&&Number.isFinite(meta.mediaTime))?meta.mediaTime:performance.now()/1000;
+ samples.push({t,y});samples=samples.filter(p=>t-p.t<=12);
+ const pn=performance.now();frameTimes.push(pn);frameTimes=frameTimes.filter(x=>pn-x<3000);
+ const fps=frameTimes.length>1?(frameTimes.length-1)/((frameTimes.at(-1)-frameTimes[0])/1000):0;
+ const arr=samples.filter(p=>t-p.t<=analysisWindow), vals=arr.map(p=>p.y), amp=vals.length?Math.max(...vals)-Math.min(...vals):0;
+ const p=estimatePeak(arr), f=fftRpm(arr);
+ let final=null,err=null,status='WAIT',cls='check';
+ if(p&&f){err=Math.abs(p-f); if(err<=10){final=(p+f)/2;status='PASS';cls='pass'} else if(err<=30){final=(p+f)/2;status='CHECK';cls='check'} else {status='MISMATCH';cls='fail'}}
+ $('peakRpm').textContent=p?Math.round(p):'--';$('fftRpm').textContent=f?Math.round(f):'--';$('rpm').textContent=final?Math.round(final):'--';
+ $('cross').textContent=err!=null?err.toFixed(1):'--';$('badge').className='badge '+cls;$('badge').textContent=status;
+ $('fps').textContent=fps?fps.toFixed(1):'--';$('amp').textContent=amp.toFixed(1);$('safeLimit').textContent=fps?Math.floor(fps*60/2.4):'--';
+ let drop=0;if(frameTimes.length>5){let ints=[];for(let i=1;i<frameTimes.length;i++)ints.push(frameTimes[i]-frameTimes[i-1]);const med=median(ints);drop=100*ints.filter(v=>v>1.8*med).length/ints.length}$('drop').textContent='Dropped '+drop.toFixed(2)+' %';
+ if(logging&&final&&pn-lastLog>1000){lastLog=pn;csv.push([new Date().toISOString(),final.toFixed(2),p.toFixed(2),f.toFixed(2),err.toFixed(2),fps.toFixed(2),amp.toFixed(2)]);$('logState').textContent=`CSV：紀錄中，共 ${csv.length} 筆`}
+ if(autoCollecting)autoSample();drawSignal();
+}
+function scheduleFrame(){if(!running)return;if('requestVideoFrameCallback'in HTMLVideoElement.prototype){video.requestVideoFrameCallback((n,m)=>{handleFrame(n,m);scheduleFrame()})}else requestAnimationFrame(()=>{handleFrame();scheduleFrame()})}
+</script>
+</body>
+</html>
