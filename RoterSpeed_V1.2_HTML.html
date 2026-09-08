@@ -3,68 +3,76 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>RoterSpeed V1.2.1 Debug</title>
+<title>RoterSpeed V1.2.2 Stable</title>
 <style>
 :root{font-family:"Microsoft JhengHei",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark}
-*{box-sizing:border-box}body{margin:0;background:#0b0b0c;color:#f4f4f4}.wrap{max-width:980px;margin:auto;padding:12px}
+*{box-sizing:border-box}
+body{margin:0;background:#0b0b0c;color:#f4f4f4}
+.wrap{max-width:980px;margin:auto;padding:12px}
 h1{font-size:22px;margin:4px 0 6px}.sub{font-size:13px;color:#aaa;margin-bottom:10px}
 .card{background:#171719;border:1px solid #2b2b2e;border-radius:14px;padding:12px;margin-bottom:10px}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-.metric{background:#242427;border-radius:10px;padding:10px}.k{font-size:12px;color:#aaa}.v{font-size:28px;font-weight:800}.big{font-size:40px}.s{font-size:12px;color:#bbb}
-button,input{font:inherit}button{border:0;border-radius:10px;padding:10px 14px;background:#eee;color:#111;font-weight:700}
-button.secondary{background:#333;color:#eee}button.good{background:#174a25;color:#fff}
-.vbox{position:relative;overflow:hidden;border-radius:12px;background:#000;touch-action:none}video{display:block;width:100%;background:#000}
-#roi{position:absolute;width:28px;height:100px;left:calc(50% - 14px);top:calc(50% - 50px);border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.12);touch-action:none}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.metric{background:#242427;border-radius:10px;padding:10px}
+.k{font-size:12px;color:#aaa}.v{font-size:28px;font-weight:800}.big{font-size:40px}.s{font-size:12px;color:#bbb}
+button,input{font:inherit}
+button{border:0;border-radius:10px;padding:10px 14px;background:#eee;color:#111;font-weight:700}
+button.secondary{background:#333;color:#eee}
+.vbox{position:relative;overflow:hidden;border-radius:12px;background:#000;touch-action:none}
+video{display:block;width:100%;background:#000}
+#roi{position:absolute;width:24px;height:90px;left:calc(50% - 12px);top:calc(50% - 45px);border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.12);touch-action:none}
 #roi:after{content:"ROI";position:absolute;left:50%;top:-24px;transform:translateX(-50%);font-size:11px;background:#fff;color:#000;padding:2px 5px;border-radius:5px}
-canvas{width:100%;height:180px;background:#090909;border-radius:10px}.note{font-size:12px;line-height:1.55;color:#bbb}
-.badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700}.pass{background:#153b21;color:#8cffab}.check{background:#4b3d12;color:#ffd966}.fail{background:#4a1919;color:#ff8f8f}
+canvas{width:100%;height:190px;background:#090909;border-radius:10px}
+.note{font-size:12px;line-height:1.55;color:#bbb}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700}
+.pass{background:#153b21;color:#8cffab}.check{background:#4b3d12;color:#ffd966}.fail{background:#4a1919;color:#ff8f8f}
 .diag{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;font-size:12px;line-height:1.5;color:#ddd}
 @media(min-width:760px){.grid{grid-template-columns:repeat(4,1fr)}}
 </style>
 </head>
-<body><div class="wrap">
-<h1>RoterSpeed V1.2.1 Debug</h1>
-<div class="sub">側邊轉軸｜Peak + FFT 雙重驗證｜AutoCorr 診斷｜CSV</div>
+<body>
+<div class="wrap">
+<h1>RoterSpeed V1.2.2 Stable</h1>
+<div class="sub">側邊轉軸｜Robust Peak + FFT + AutoCorr｜Safari HTML 測試版</div>
 
 <div class="card">
-<div class="vbox" id="vbox"><video id="video" autoplay playsinline muted></video><div id="roi"></div></div>
-<div class="row" style="margin-top:10px">
-<button id="start">啟動相機</button><button id="stop" class="secondary">停止</button>
-<button id="reset" class="secondary">清除</button>
-</div>
-<div class="row" style="margin-top:10px">
-<label>ROI寬 <input id="roiW" type="range" min="8" max="100" value="28"></label>
-<label>ROI高 <input id="roiH" type="range" min="30" max="220" value="100"></label>
-<label>分析窗 <input id="win" type="range" min="2" max="10" value="6"></label><span id="winText">6 s</span>
-</div>
-<div class="note">先確認 Signal Amp ≥ 15，且波形有規律週期。ROI 只框白色標記會通過的軸面，不要包含背景或軸承座。</div>
+  <div class="vbox" id="vbox"><video id="video" autoplay playsinline muted></video><div id="roi"></div></div>
+  <div class="row" style="margin-top:10px">
+    <button id="start">啟動相機</button>
+    <button id="stop" class="secondary">停止</button>
+    <button id="reset" class="secondary">清除</button>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <label>ROI寬 <input id="roiW" type="range" min="8" max="80" value="24"></label>
+    <label>ROI高 <input id="roiH" type="range" min="30" max="180" value="90"></label>
+    <label>穩定分析窗 <input id="win" type="range" min="1.5" max="5" step="0.5" value="2.5"></label>
+    <span id="winText">2.5 s</span>
+  </div>
+  <div class="note">ROI 只框白色標記通過的軸表面。此版會自動忽略大幅瞬間亮度跳變，只分析最近穩定波形。</div>
 </div>
 
 <div class="card grid">
-<div class="metric"><div class="k">暫估 / Final RPM</div><div class="v big" id="rpm">--</div><div class="s" id="rpmMode">等待訊號</div></div>
-<div class="metric"><div class="k">Peak RPM</div><div class="v" id="peakRpm">--</div><div class="s">遲滯 crossing</div></div>
-<div class="metric"><div class="k">FFT RPM</div><div class="v" id="fftRpm">--</div><div class="s">頻域</div></div>
-<div class="metric"><div class="k">AutoCorr RPM</div><div class="v" id="acRpm">--</div><div class="s">診斷值</div></div>
+  <div class="metric"><div class="k">Final RPM</div><div class="v big" id="rpm">--</div><div class="s" id="rpmMode">等待穩定訊號</div></div>
+  <div class="metric"><div class="k">Peak RPM</div><div class="v" id="peakRpm">--</div><div class="s">百分位遲滯法</div></div>
+  <div class="metric"><div class="k">FFT RPM</div><div class="v" id="fftRpm">--</div><div class="s">去趨勢頻域法</div></div>
+  <div class="metric"><div class="k">AutoCorr RPM</div><div class="v" id="acRpm">--</div><div class="s">自相關法</div></div>
 </div>
 
 <div class="card grid">
-<div class="metric"><div class="k">Cross Error</div><div class="v" id="cross">--</div><div class="s"><span id="badge" class="badge check">WAIT</span></div></div>
-<div class="metric"><div class="k">Actual FPS</div><div class="v" id="fps">--</div><div class="s" id="drop">Dropped --</div></div>
-<div class="metric"><div class="k">Signal Amp</div><div class="v" id="amp">--</div><div class="s" id="ampState">--</div></div>
-<div class="metric"><div class="k">HTML Safe Limit</div><div class="v" id="safeLimit">--</div><div class="s">依實際 FPS</div></div>
+  <div class="metric"><div class="k">Actual FPS</div><div class="v" id="fps">--</div><div class="s" id="drop">Dropped --</div></div>
+  <div class="metric"><div class="k">Robust Signal Amp</div><div class="v" id="amp">--</div><div class="s" id="ampState">--</div></div>
+  <div class="metric"><div class="k">Recommended Max</div><div class="v" id="safeLimit">--</div><div class="s">rpm，HTML可靠上限</div></div>
+  <div class="metric"><div class="k">Cross Error</div><div class="v" id="cross">--</div><div class="s"><span id="badge" class="badge check">WAIT</span></div></div>
 </div>
-
-<div class="card"><canvas id="signal" width="900" height="200"></canvas>
-<div class="note">白線＝ROI 平均亮度；黃線＝高門檻；灰線＝低門檻。</div></div>
-
-<div class="card"><b>即時診斷</b><div class="diag" id="debug">等待相機...</div></div>
 
 <div class="card">
-<div class="row">
-<button id="logStart" class="good">開始 CSV</button><button id="logStop" class="secondary">停止 CSV</button>
-<button id="downloadCsv" class="secondary">下載 CSV</button><button id="clearCsv" class="secondary">清除 CSV</button>
+  <canvas id="signal" width="900" height="220"></canvas>
+  <div class="note">白線＝最近穩定區段；黃線/灰線＝自動高低門檻。巨大尖峰不再直接決定門檻。</div>
 </div>
-<div class="note" id="logState" style="margin-top:8px">CSV：未紀錄</div>
+
+<div class="card">
+  <b>即時診斷</b>
+  <div class="diag" id="debug">等待相機...</div>
 </div>
 </div>
 
@@ -73,112 +81,176 @@ const $=id=>document.getElementById(id);
 const video=$('video'),roi=$('roi'),vbox=$('vbox');
 const off=document.createElement('canvas'),ox=off.getContext('2d',{willReadFrequently:true});
 const sig=$('signal'),gx=sig.getContext('2d');
-let stream=null,running=false,samples=[],frameTimes=[],analysisWindow=6,drag=false,dx=0,dy=0,csv=[],logging=false,lastLog=0;
+let stream=null,running=false,samples=[],frameTimes=[],stableWindow=2.5,drag=false,dx=0,dy=0;
 
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 const mean=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
 const median=a=>{if(!a.length)return 0;const b=[...a].sort((x,y)=>x-y);return b[Math.floor(b.length/2)]};
+const percentile=(a,p)=>{
+ if(!a.length)return 0;
+ const b=[...a].sort((x,y)=>x-y);
+ const idx=(b.length-1)*p,lo=Math.floor(idx),hi=Math.ceil(idx);
+ return lo===hi?b[lo]:b[lo]+(b[hi]-b[lo])*(idx-lo);
+};
 
 $('roiW').oninput=e=>roi.style.width=e.target.value+'px';
 $('roiH').oninput=e=>roi.style.height=e.target.value+'px';
-$('win').oninput=e=>{analysisWindow=+e.target.value;$('winText').textContent=analysisWindow+' s'};
+$('win').oninput=e=>{stableWindow=+e.target.value;$('winText').textContent=stableWindow.toFixed(1)+' s'};
 
-roi.addEventListener('pointerdown',e=>{roi.setPointerCapture(e.pointerId);const r=roi.getBoundingClientRect();drag=true;dx=e.clientX-r.left;dy=e.clientY-r.top});
-roi.addEventListener('pointermove',e=>{if(!drag)return;const b=vbox.getBoundingClientRect();roi.style.left=clamp(e.clientX-b.left-dx,0,b.width-roi.offsetWidth)+'px';roi.style.top=clamp(e.clientY-b.top-dy,0,b.height-roi.offsetHeight)+'px'});
-roi.addEventListener('pointerup',()=>drag=false);roi.addEventListener('pointercancel',()=>drag=false);
+roi.addEventListener('pointerdown',e=>{
+ roi.setPointerCapture(e.pointerId);
+ const r=roi.getBoundingClientRect();drag=true;dx=e.clientX-r.left;dy=e.clientY-r.top;
+});
+roi.addEventListener('pointermove',e=>{
+ if(!drag)return;
+ const b=vbox.getBoundingClientRect();
+ roi.style.left=clamp(e.clientX-b.left-dx,0,b.width-roi.offsetWidth)+'px';
+ roi.style.top=clamp(e.clientY-b.top-dy,0,b.height-roi.offsetHeight)+'px';
+});
+roi.addEventListener('pointerup',()=>drag=false);
+roi.addEventListener('pointercancel',()=>drag=false);
 
 $('start').onclick=async()=>{
  try{
   if(!isSecureContext)throw new Error('請用 HTTPS GitHub Pages 開啟');
   if(stream)stream.getTracks().forEach(t=>t.stop());
-  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:60,max:60}},audio:false});
-  video.srcObject=stream;await video.play();running=true;samples=[];frameTimes=[];schedule();
+  stream=await navigator.mediaDevices.getUserMedia({
+   video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:60,max:60}},
+   audio:false
+  });
+  video.srcObject=stream;await video.play();
+  running=true;samples=[];frameTimes=[];schedule();
  }catch(e){alert('相機失敗：'+e.message)}
 };
 $('stop').onclick=()=>{running=false;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null};
 $('reset').onclick=()=>{samples=[];frameTimes=[];$('rpm').textContent=$('peakRpm').textContent=$('fftRpm').textContent=$('acRpm').textContent='--'};
 
-$('logStart').onclick=()=>{logging=true;$('logState').textContent='CSV：紀錄中'};
-$('logStop').onclick=()=>{logging=false;$('logState').textContent=`CSV：停止，共 ${csv.length} 筆`};
-$('clearCsv').onclick=()=>{csv=[];$('logState').textContent='CSV：已清除'};
-$('downloadCsv').onclick=()=>{
- const h='timestamp,display_rpm,peak_rpm,fft_rpm,autocorr_rpm,cross_error_rpm,fps,signal_amp,status\n';
- const b=csv.map(r=>r.join(',')).join('\n');
- const blob=new Blob(['\ufeff'+h+b],{type:'text/csv;charset=utf-8'});
- const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='RoterSpeed_V1.2.1_log.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)
-};
-
 function readROI(){
  if(!video.videoWidth)return null;
- off.width=video.videoWidth;off.height=video.videoHeight;ox.drawImage(video,0,0,off.width,off.height);
+ off.width=video.videoWidth;off.height=video.videoHeight;
+ ox.drawImage(video,0,0,off.width,off.height);
  const vb=video.getBoundingClientRect(),rr=roi.getBoundingClientRect();
  let sx=clamp(Math.floor((rr.left-vb.left)/vb.width*off.width),0,off.width-2);
  let sy=clamp(Math.floor((rr.top-vb.top)/vb.height*off.height),0,off.height-2);
  let sw=clamp(Math.floor(rr.width/vb.width*off.width),2,off.width-sx);
  let sh=clamp(Math.floor(rr.height/vb.height*off.height),2,off.height-sy);
- const d=ox.getImageData(sx,sy,sw,sh).data;let sum=0,n=0;
- for(let i=0;i<d.length;i+=16){sum+=.2126*d[i]+.7152*d[i+1]+.0722*d[i+2];n++}
+ const d=ox.getImageData(sx,sy,sw,sh).data;
+ let sum=0,n=0;
+ for(let i=0;i<d.length;i+=16){
+  sum+=.2126*d[i]+.7152*d[i+1]+.0722*d[i+2];n++;
+ }
  return sum/n;
 }
 
-function peakEstimate(arr){
- if(arr.length<30)return null;
- const v=arr.map(p=>p.y),mn=Math.min(...v),mx=Math.max(...v),amp=mx-mn;if(amp<6)return null;
- const low=mn+amp*.38,high=mn+amp*.62;let state=0,times=[];
- for(let i=0;i<v.length;i++){
-  if(state===0&&v[i]>=high){times.push(arr[i].t);state=1}
-  else if(state===1&&v[i]<=low)state=0;
- }
- if(times.length<3)return null;
- let d=[];for(let i=1;i<times.length;i++){let z=times[i]-times[i-1];if(z>.008)d.push(z)}
- if(d.length<2)return null;
- const med=median(d),good=d.filter(x=>Math.abs(x-med)/med<.35);if(good.length<2)return null;
- return {rpm:60/mean(good),count:times.length,low,high};
+function cleanSignal(arr){
+ if(arr.length<10)return arr;
+ const vals=arr.map(p=>p.y);
+ const q05=percentile(vals,.05),q95=percentile(vals,.95);
+ const span=Math.max(1,q95-q05);
+ return arr.map(p=>({t:p.t,y:clamp(p.y,q05-1.5*span,q95+1.5*span)}));
 }
 
-function fftEstimate(arr){
+function peakEstimate(arr,maxRPM){
+ if(arr.length<30)return null;
+ const v=arr.map(p=>p.y);
+ const q20=percentile(v,.20),q80=percentile(v,.80),amp=q80-q20;
+ if(amp<4)return null;
+ const low=q20+amp*.25,high=q20+amp*.75;
+ const minDt=60/Math.max(100,maxRPM)*0.55;
+ let state=0,times=[];
+ for(let i=0;i<v.length;i++){
+  if(state===0 && v[i]>=high){
+   if(!times.length || arr[i].t-times.at(-1)>=minDt)times.push(arr[i].t);
+   state=1;
+  }else if(state===1 && v[i]<=low){
+   state=0;
+  }
+ }
+ if(times.length<3)return null;
+ let d=[];for(let i=1;i<times.length;i++)d.push(times[i]-times[i-1]);
+ const med=median(d);
+ const good=d.filter(x=>Math.abs(x-med)/med<.25);
+ if(good.length<2)return null;
+ return {rpm:60/mean(good),count:times.length,low,high,amp};
+}
+
+function detrend(x){
+ if(x.length<3)return x;
+ const n=x.length;
+ let sx=0,sy=0,sxx=0,sxy=0;
+ for(let i=0;i<n;i++){sx+=i;sy+=x[i];sxx+=i*i;sxy+=i*x[i]}
+ const den=n*sxx-sx*sx||1;
+ const a=(n*sxy-sx*sy)/den,b=(sy-a*sx)/n;
+ return x.map((v,i)=>v-(a*i+b));
+}
+
+function fftEstimate(arr,maxRPM){
  if(arr.length<64)return null;
- const span=arr.at(-1).t-arr[0].t,fs=(arr.length-1)/span;
- const N=1<<Math.floor(Math.log2(Math.min(arr.length,512)));
- let x=arr.slice(-N).map(p=>p.y),m=mean(x);
- for(let i=0;i<N;i++)x[i]=(x[i]-m)*(.5-.5*Math.cos(2*Math.PI*i/(N-1)));
- const maxHz=Math.min(5000/60,fs/2.2);
- const k0=1,k1=Math.min(Math.floor(maxHz*N/fs),N/2-2);
+ const span=arr.at(-1).t-arr[0].t;
+ const fs=(arr.length-1)/span;
+ let N=1<<Math.floor(Math.log2(Math.min(arr.length,256)));
+ if(N<64)return null;
+ let x=detrend(arr.slice(-N).map(p=>p.y));
+ const m=mean(x);x=x.map(v=>v-m);
+ for(let i=0;i<N;i++)x[i]*=(.5-.5*Math.cos(2*Math.PI*i/(N-1)));
+ const minHz=1.5,maxHz=Math.min(maxRPM/60,fs/2.2);
+ const k0=Math.max(1,Math.ceil(minHz*N/fs));
+ const k1=Math.min(Math.floor(maxHz*N/fs),N/2-2);
+ if(k1<=k0)return null;
  let mags=[],bk=0,bm=-1;
  for(let k=k0;k<=k1;k++){
   let re=0,im=0;
-  for(let n=0;n<N;n++){let a=2*Math.PI*k*n/N;re+=x[n]*Math.cos(a);im-=x[n]*Math.sin(a)}
-  let q=re*re+im*im;mags[k]=q;if(q>bm){bm=q;bk=k}
+  for(let n=0;n<N;n++){
+   const a=2*Math.PI*k*n/N;
+   re+=x[n]*Math.cos(a);im-=x[n]*Math.sin(a);
+  }
+  const q=re*re+im*im;mags[k]=q;
+  if(q>bm){bm=q;bk=k}
  }
  if(!bk)return null;
  let kr=bk;
- if(bk>k0&&bk<k1){let a=mags[bk-1]||0,b=mags[bk]||0,c=mags[bk+1]||0,den=a-2*b+c;if(Math.abs(den)>1e-12)kr=bk+clamp(.5*(a-c)/den,-.5,.5)}
+ if(bk>k0&&bk<k1){
+  const a=mags[bk-1]||0,b=mags[bk]||0,c=mags[bk+1]||0;
+  const den=a-2*b+c;
+  if(Math.abs(den)>1e-12)kr=bk+clamp(.5*(a-c)/den,-.5,.5);
+ }
  return {rpm:kr*fs/N*60,fs};
 }
 
-function acEstimate(arr){
+function acEstimate(arr,maxRPM){
  if(arr.length<40)return null;
- const span=arr.at(-1).t-arr[0].t,fs=(arr.length-1)/span;
- let x=arr.map(p=>p.y),m=mean(x);x=x.map(v=>v-m);
- const maxHz=Math.min(5000/60,fs/2.2);
- let minLag=Math.max(2,Math.floor(fs/maxHz)),maxLag=Math.min(Math.floor(x.length/2),Math.ceil(fs/1));
+ const span=arr.at(-1).t-arr[0].t;
+ const fs=(arr.length-1)/span;
+ let x=detrend(arr.map(p=>p.y)),m=mean(x);x=x.map(v=>v-m);
+ const minLag=Math.max(2,Math.floor(fs/(maxRPM/60)));
+ const maxLag=Math.min(Math.floor(x.length/2),Math.ceil(fs/1.5));
  let best=-2,bl=0;
  for(let lag=minLag;lag<=maxLag;lag++){
   let num=0,a=0,b=0;
-  for(let i=lag;i<x.length;i++){num+=x[i]*x[i-lag];a+=x[i]**2;b+=x[i-lag]**2}
-  let r=num/Math.sqrt((a||1)*(b||1));if(r>best){best=r;bl=lag}
+  for(let i=lag;i<x.length;i++){
+   num+=x[i]*x[i-lag];a+=x[i]*x[i];b+=x[i-lag]*x[i-lag];
+  }
+  const r=num/Math.sqrt((a||1)*(b||1));
+  if(r>best){best=r;bl=lag}
  }
  return bl?{rpm:60*fs/bl,score:best}:null;
 }
 
 function draw(arr,pk){
  gx.clearRect(0,0,sig.width,sig.height);if(arr.length<2)return;
- let v=arr.map(p=>p.y),mn=Math.min(...v),mx=Math.max(...v);if(mx-mn<1)mx=mn+1;
- gx.beginPath();arr.forEach((p,i)=>{let x=i/(arr.length-1)*sig.width,y=sig.height-(p.y-mn)/(mx-mn)*sig.height;i?gx.lineTo(x,y):gx.moveTo(x,y)});
+ const v=arr.map(p=>p.y);
+ let mn=percentile(v,.02),mx=percentile(v,.98);if(mx-mn<1)mx=mn+1;
+ gx.beginPath();
+ arr.forEach((p,i)=>{
+  const x=i/(arr.length-1)*sig.width;
+  const y=sig.height-(clamp(p.y,mn,mx)-mn)/(mx-mn)*sig.height;
+  i?gx.lineTo(x,y):gx.moveTo(x,y);
+ });
  gx.strokeStyle='#fff';gx.lineWidth=2;gx.stroke();
  if(pk){
   for(const [val,col] of [[pk.high,'#ffd966'],[pk.low,'#777']]){
-   let y=sig.height-(val-mn)/(mx-mn)*sig.height;gx.beginPath();gx.moveTo(0,y);gx.lineTo(sig.width,y);gx.strokeStyle=col;gx.lineWidth=1;gx.stroke()
+   const y=sig.height-(val-mn)/(mx-mn)*sig.height;
+   gx.beginPath();gx.moveTo(0,y);gx.lineTo(sig.width,y);gx.strokeStyle=col;gx.lineWidth=1;gx.stroke();
   }
  }
 }
@@ -186,54 +258,85 @@ function draw(arr,pk){
 function handle(now,meta){
  const y=readROI();if(y==null)return;
  const t=(meta&&Number.isFinite(meta.mediaTime))?meta.mediaTime:performance.now()/1000;
- samples.push({t,y});samples=samples.filter(p=>t-p.t<=12);
+ samples.push({t,y});samples=samples.filter(p=>t-p.t<=8);
+
  const pn=performance.now();frameTimes.push(pn);frameTimes=frameTimes.filter(x=>pn-x<3000);
  const fps=frameTimes.length>1?(frameTimes.length-1)/((frameTimes.at(-1)-frameTimes[0])/1000):0;
- const arr=samples.filter(p=>t-p.t<=analysisWindow),vals=arr.map(p=>p.y),amp=vals.length?Math.max(...vals)-Math.min(...vals):0;
- const p=peakEstimate(arr),f=fftEstimate(arr),a=acEstimate(arr);
+
+ let raw=samples.filter(p=>t-p.t<=stableWindow);
+ let arr=cleanSignal(raw);
+ const vals=arr.map(p=>p.y);
+ const robustAmp=vals.length?percentile(vals,.90)-percentile(vals,.10):0;
+
+ const safeMax=fps?Math.floor(fps*60/2.5):0;
+ const maxRPM=Math.max(300,Math.min(1800,safeMax||1200));
+
+ const p=peakEstimate(arr,maxRPM);
+ const f=fftEstimate(arr,maxRPM);
+ const a=acEstimate(arr,maxRPM);
  const pr=p?.rpm,fr=f?.rpm,ar=a?.rpm;
- let display=null,status='WAIT',mode='等待訊號',err=null,cls='check';
+
+ let candidates=[pr,fr,ar].filter(v=>v&&isFinite(v));
+ let display=null,mode='等待穩定訊號',status='WAIT',cls='check',err=null;
+
  if(pr&&fr){
   err=Math.abs(pr-fr);
-  if(err<=10){display=(pr+fr)/2;status='PASS';mode='Peak + FFT 通過';cls='pass'}
-  else if(err<=40){display=(pr+fr)/2;status='CHECK';mode='暫估值：雙法有差異';cls='check'}
-  else{display=fr;status='MISMATCH';mode='暫估值：採 FFT';cls='fail'}
- }else if(fr){display=fr;status='FFT ONLY';mode='暫估值：僅 FFT';cls='check'}
- else if(pr){display=pr;status='PEAK ONLY';mode='暫估值：僅 Peak';cls='check'}
- else if(ar){display=ar;status='AC ONLY';mode='暫估值：僅 AutoCorr';cls='check'}
+  if(err<=10){display=(pr+fr)/2;mode='Peak + FFT PASS';status='PASS';cls='pass'}
+  else if(err<=35){display=(pr+fr)/2;mode='Peak + FFT CHECK';status='CHECK';cls='check'}
+  else if(ar){
+   const dpa=Math.abs(pr-ar),dfa=Math.abs(fr-ar);
+   display=dpa<dfa?(pr+ar)/2:(fr+ar)/2;
+   mode='三法比對暫估';status='CHECK';cls='check';
+  }
+ }else if(candidates.length>=2){
+  candidates.sort((x,y)=>x-y);
+  display=(candidates[0]+candidates[1])/2;mode='兩法暫估';status='CHECK';cls='check';
+ }else if(candidates.length===1){
+  display=candidates[0];mode='單法暫估';status='LOW';cls='fail';
+ }
 
- $('rpm').textContent=display?Math.round(display):'--';$('rpmMode').textContent=mode;
- $('peakRpm').textContent=pr?Math.round(pr):'--';$('fftRpm').textContent=fr?Math.round(fr):'--';$('acRpm').textContent=ar?Math.round(ar):'--';
- $('cross').textContent=err!=null?err.toFixed(1):'--';$('badge').className='badge '+cls;$('badge').textContent=status;
- $('fps').textContent=fps?fps.toFixed(1):'--';$('amp').textContent=amp.toFixed(1);$('ampState').textContent=amp>=20?'GOOD':amp>=10?'LOW':'TOO LOW';
- $('safeLimit').textContent=fps?Math.floor(fps*60/2.4):'--';
+ $('rpm').textContent=display?Math.round(display):'--';
+ $('rpmMode').textContent=mode;
+ $('peakRpm').textContent=pr?Math.round(pr):'--';
+ $('fftRpm').textContent=fr?Math.round(fr):'--';
+ $('acRpm').textContent=ar?Math.round(ar):'--';
+ $('cross').textContent=err!=null?err.toFixed(1):'--';
+ $('badge').className='badge '+cls;$('badge').textContent=status;
+ $('fps').textContent=fps?fps.toFixed(1):'--';
+ $('amp').textContent=robustAmp.toFixed(1);
+ $('ampState').textContent=robustAmp>=20?'GOOD':robustAmp>=8?'LOW':'TOO LOW';
+ $('safeLimit').textContent=safeMax||'--';
 
  let drop=0;
- if(frameTimes.length>5){let ints=[];for(let i=1;i<frameTimes.length;i++)ints.push(frameTimes[i]-frameTimes[i-1]);let md=median(ints);drop=100*ints.filter(v=>v>1.8*md).length/ints.length}
+ if(frameTimes.length>5){
+  let ints=[];for(let i=1;i<frameTimes.length;i++)ints.push(frameTimes[i]-frameTimes[i-1]);
+  const md=median(ints);drop=100*ints.filter(v=>v>1.8*md).length/ints.length;
+ }
  $('drop').textContent='Dropped '+drop.toFixed(2)+' %';
 
- $('debug').textContent=`Camera: ${video.videoWidth}×${video.videoHeight}
+ $('debug').textContent=
+`Camera: ${video.videoWidth}×${video.videoHeight}
 FPS: ${fps.toFixed(2)}
+Stable window: ${stableWindow.toFixed(1)} s
 Samples: ${arr.length}
-Signal min/max: ${vals.length?Math.min(...vals).toFixed(1):'--'} / ${vals.length?Math.max(...vals).toFixed(1):'--'}
-Signal amplitude: ${amp.toFixed(1)}
+Robust amplitude(P90-P10): ${robustAmp.toFixed(1)}
 Peak crossings: ${p?.count ?? 0}
 Peak RPM: ${pr?.toFixed(2) ?? '--'}
 FFT RPM: ${fr?.toFixed(2) ?? '--'}
 AutoCorr RPM: ${ar?.toFixed(2) ?? '--'}
 Cross error: ${err?.toFixed(2) ?? '--'}
+Recommended max: ${safeMax || '--'} rpm
 Status: ${status}`;
 
- if(logging&&display&&pn-lastLog>1000){
-  lastLog=pn;csv.push([new Date().toISOString(),display.toFixed(2),pr?.toFixed(2)||'',fr?.toFixed(2)||'',ar?.toFixed(2)||'',err?.toFixed(2)||'',fps.toFixed(2),amp.toFixed(2),status]);
-  $('logState').textContent=`CSV：紀錄中，共 ${csv.length} 筆`;
- }
  draw(arr,p);
 }
 
 function schedule(){
  if(!running)return;
- if('requestVideoFrameCallback'in HTMLVideoElement.prototype)video.requestVideoFrameCallback((n,m)=>{handle(n,m);schedule()});
- else requestAnimationFrame(()=>{handle();schedule()});
+ if('requestVideoFrameCallback'in HTMLVideoElement.prototype){
+  video.requestVideoFrameCallback((n,m)=>{handle(n,m);schedule()});
+ }else requestAnimationFrame(()=>{handle();schedule()});
 }
-</script></body></html>
+</script>
+</body>
+</html>
