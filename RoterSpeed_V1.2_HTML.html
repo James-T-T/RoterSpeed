@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>RoterSpeed V1.2.6 AutoPeak</title>
+<title>RoterSpeed V1.2.6 HarmonicFix</title>
 <style>
 :root{font-family:"Microsoft JhengHei",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark}
 *{box-sizing:border-box}body{margin:0;background:#0b0b0c;color:#f4f4f4}
@@ -14,21 +14,22 @@ h1{font-size:22px;margin:4px 0 6px}.sub{font-size:13px;color:#aaa;margin-bottom:
 .metric{background:#242427;border-radius:10px;padding:10px}.k{font-size:12px;color:#aaa}.v{font-size:28px;font-weight:800}.big{font-size:40px}.s{font-size:12px;color:#bbb}
 button,input{font:inherit}button{border:0;border-radius:10px;padding:10px 14px;background:#eee;color:#111;font-weight:700}
 button.secondary{background:#333;color:#eee}
+input[type=number]{width:82px;padding:7px;border-radius:8px;border:1px solid #444;background:#222;color:#fff}
 .vbox{position:relative;overflow:hidden;border-radius:12px;background:#000;touch-action:none}
 video{display:block;width:100%;background:#000}
-#roi{position:absolute;width:18px;height:78px;left:calc(50% - 9px);top:calc(50% - 39px);border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.12);touch-action:none}
+#roi{position:absolute;width:20px;height:80px;left:calc(50% - 10px);top:calc(50% - 40px);border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.12);touch-action:none}
 #roi:after{content:"ROI";position:absolute;left:50%;top:-24px;transform:translateX(-50%);font-size:11px;background:#fff;color:#000;padding:2px 5px;border-radius:5px}
-canvas{width:100%;height:195px;background:#090909;border-radius:10px}
+canvas{width:100%;height:200px;background:#090909;border-radius:10px}
 .note{font-size:12px;line-height:1.55;color:#bbb}
 .diag{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;font-size:12px;line-height:1.5;color:#ddd}
-.pass{color:#8cffab}.check{color:#ffd966}.fail{color:#ff8f8f}
+.pass{color:#8cffab}.warn{color:#ffd966}.bad{color:#ff8f8f}
 @media(min-width:760px){.grid{grid-template-columns:repeat(4,1fr)}}
 </style>
 </head>
 <body>
 <div class="wrap">
-<h1>RoterSpeed V1.2.6 AutoPeak</h1>
-<div class="sub">最大特徵峰值自動追蹤｜免輸入 RPM 區間｜FFT / AutoCorr 驗證</div>
+<h1>RoterSpeed V1.2.6 HarmonicFix</h1>
+<div class="sub">弱峰補抓｜1/2 倍頻修正｜FFT + AutoCorr 引導峰值偵測</div>
 
 <div class="card">
   <div class="vbox" id="vbox"><video id="video" autoplay playsinline muted></video><div id="roi"></div></div>
@@ -38,29 +39,34 @@ canvas{width:100%;height:195px;background:#090909;border-radius:10px}
     <button id="reset" class="secondary">清除</button>
   </div>
   <div class="row" style="margin-top:10px">
-    <label>ROI寬 <input id="roiW" type="range" min="6" max="60" value="18"></label>
-    <label>ROI高 <input id="roiH" type="range" min="20" max="160" value="78"></label>
+    <label>最低 RPM <input id="minRPM" type="number" min="1" max="5000" value="10"></label>
+    <label>最高 RPM <input id="maxRPM" type="number" min="2" max="5000" value="200"></label>
+    <label>分析窗(s) <input id="win" type="number" min="3" max="30" step="1" value="8"></label>
   </div>
-  <div class="note">不需輸入轉速範圍。程式會自動從 ROI 亮度訊號找出最顯著、重複出現的主峰。</div>
+  <div class="row" style="margin-top:10px">
+    <label>ROI寬 <input id="roiW" type="range" min="6" max="60" value="20"></label>
+    <label>ROI高 <input id="roiH" type="range" min="20" max="160" value="80"></label>
+  </div>
+  <div class="note">若預估約 70–80 rpm，建議先設 20–150 rpm、分析窗 6–10 秒。此版會主動補抓較低的交錯峰值。</div>
 </div>
 
 <div class="card grid">
-  <div class="metric"><div class="k">Final RPM</div><div class="v big" id="rpm">--</div><div class="s" id="rpmMode">等待足夠週期</div></div>
-  <div class="metric"><div class="k">AutoPeak RPM</div><div class="v" id="peakRpm">--</div><div class="s">主要量測值</div></div>
-  <div class="metric"><div class="k">FFT RPM</div><div class="v" id="fftRpm">--</div><div class="s">驗證值</div></div>
-  <div class="metric"><div class="k">AutoCorr RPM</div><div class="v" id="acRpm">--</div><div class="s">驗證值</div></div>
+  <div class="metric"><div class="k">Final RPM</div><div class="v big" id="rpm">--</div><div class="s" id="rpmMode">等待穩定訊號</div></div>
+  <div class="metric"><div class="k">Adaptive Peak RPM</div><div class="v" id="peakRpm">--</div><div class="s">強峰＋弱峰</div></div>
+  <div class="metric"><div class="k">FFT RPM</div><div class="v" id="fftRpm">--</div><div class="s">頻域主頻</div></div>
+  <div class="metric"><div class="k">AutoCorr RPM</div><div class="v" id="acRpm">--</div><div class="s">週期驗證</div></div>
 </div>
 
 <div class="card grid">
   <div class="metric"><div class="k">Sampling FPS</div><div class="v" id="fps">--</div><div class="s">Safari RAF</div></div>
+  <div class="metric"><div class="k">Strong / Weak Peaks</div><div class="v" id="peakCounts">--</div><div class="s">分析窗內</div></div>
+  <div class="metric"><div class="k">Harmonic Ratio</div><div class="v" id="harmonicRatio">--</div><div class="s">Spectral / Peak</div></div>
   <div class="metric"><div class="k">Peak Prominence</div><div class="v" id="prom">--</div><div class="s" id="promState">--</div></div>
-  <div class="metric"><div class="k">Strong Peaks</div><div class="v" id="peakCount">0</div><div class="s">分析窗內</div></div>
-  <div class="metric"><div class="k">HTML可信上限</div><div class="v" id="safeLimit">--</div><div class="s">rpm</div></div>
 </div>
 
 <div class="card">
-  <canvas id="signal" width="900" height="220"></canvas>
-  <div class="note">白線＝平滑後亮度；紅色短線＝被判定為每圈代表峰值；黃線＝自動強峰門檻。</div>
+  <canvas id="signal" width="900" height="230"></canvas>
+  <div class="note">白線＝平滑後亮度；紅線＝強峰；橘線＝補抓弱峰。若出現交錯高低峰，兩種都會列入每圈事件。</div>
 </div>
 
 <div class="card"><b>即時診斷</b><div class="diag" id="debug">等待相機...</div></div>
@@ -82,48 +88,79 @@ const percentile=(a,p)=>{
  const b=[...a].sort((x,y)=>x-y),idx=(b.length-1)*p,lo=Math.floor(idx),hi=Math.ceil(idx);
  return lo===hi?b[lo]:b[lo]+(b[hi]-b[lo])*(idx-lo);
 };
+const mad=a=>{
+ if(!a.length)return 0;
+ const m=median(a);
+ return median(a.map(v=>Math.abs(v-m)));
+};
 
 $('roiW').oninput=e=>roi.style.width=e.target.value+'px';
 $('roiH').oninput=e=>roi.style.height=e.target.value+'px';
 
 roi.addEventListener('pointerdown',e=>{
- roi.setPointerCapture(e.pointerId);const r=roi.getBoundingClientRect();drag=true;dx=e.clientX-r.left;dy=e.clientY-r.top;
+ roi.setPointerCapture(e.pointerId);const r=roi.getBoundingClientRect();
+ drag=true;dx=e.clientX-r.left;dy=e.clientY-r.top;
 });
 roi.addEventListener('pointermove',e=>{
  if(!drag)return;const b=vbox.getBoundingClientRect();
  roi.style.left=clamp(e.clientX-b.left-dx,0,b.width-roi.offsetWidth)+'px';
  roi.style.top=clamp(e.clientY-b.top-dy,0,b.height-roi.offsetHeight)+'px';
 });
-roi.addEventListener('pointerup',()=>drag=false);roi.addEventListener('pointercancel',()=>drag=false);
+roi.addEventListener('pointerup',()=>drag=false);
+roi.addEventListener('pointercancel',()=>drag=false);
 
 async function startCamera(){
  loopGeneration++;running=false;
  if(stream)stream.getTracks().forEach(t=>t.stop());
  samples=[];tickTimes=[];lastSamplePerf=0;
  stream=await navigator.mediaDevices.getUserMedia({
-  video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:60,max:60}},audio:false
+  video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:60,max:60}},
+  audio:false
  });
- video.srcObject=stream;await video.play();
- running=true;const gen=loopGeneration;requestAnimationFrame(ts=>loop(ts,gen));
+ video.srcObject=stream;
+ await video.play();
+ running=true;
+ const gen=loopGeneration;
+ requestAnimationFrame(ts=>loop(ts,gen));
 }
-$('start').onclick=async()=>{try{if(!isSecureContext)throw new Error('請用 HTTPS 開啟');await startCamera()}catch(e){alert('相機失敗：'+e.message)}};
-$('stop').onclick=()=>{loopGeneration++;running=false;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null};
-$('reset').onclick=()=>{samples=[];tickTimes=[];$('rpm').textContent=$('peakRpm').textContent=$('fftRpm').textContent=$('acRpm').textContent='--'};
+
+$('start').onclick=async()=>{
+ try{
+  if(!isSecureContext)throw new Error('請使用 HTTPS');
+  await startCamera();
+ }catch(e){alert('相機失敗：'+e.message)}
+};
+$('stop').onclick=()=>{
+ loopGeneration++;running=false;
+ if(stream)stream.getTracks().forEach(t=>t.stop());
+ stream=null;
+};
+$('reset').onclick=()=>{
+ samples=[];tickTimes=[];
+ $('rpm').textContent=$('peakRpm').textContent=$('fftRpm').textContent=$('acRpm').textContent='--';
+};
 
 function readROI(){
  if(!video.videoWidth||video.readyState<2)return null;
- off.width=video.videoWidth;off.height=video.videoHeight;ox.drawImage(video,0,0,off.width,off.height);
+ off.width=video.videoWidth;off.height=video.videoHeight;
+ ox.drawImage(video,0,0,off.width,off.height);
+
  const vb=video.getBoundingClientRect(),rr=roi.getBoundingClientRect();
  let sx=clamp(Math.floor((rr.left-vb.left)/vb.width*off.width),0,off.width-2);
  let sy=clamp(Math.floor((rr.top-vb.top)/vb.height*off.height),0,off.height-2);
  let sw=clamp(Math.floor(rr.width/vb.width*off.width),2,off.width-sx);
  let sh=clamp(Math.floor(rr.height/vb.height*off.height),2,off.height-sy);
- const d=ox.getImageData(sx,sy,sw,sh).data;let sum=0,n=0;
- for(let i=0;i<d.length;i+=16){sum+=.2126*d[i]+.7152*d[i+1]+.0722*d[i+2];n++}
+
+ const d=ox.getImageData(sx,sy,sw,sh).data;
+ let sum=0,n=0;
+ for(let i=0;i<d.length;i+=16){
+  sum+=.2126*d[i]+.7152*d[i+1]+.0722*d[i+2];
+  n++;
+ }
  return n?sum/n:null;
 }
 
-function medFilter(arr,k=5){
+function medFilter(arr,k=3){
  if(arr.length<k)return arr;
  const h=Math.floor(k/2),out=[];
  for(let i=0;i<arr.length;i++){
@@ -134,216 +171,376 @@ function medFilter(arr,k=5){
  return out;
 }
 
-function robustMAD(v){
- const m=median(v);
- return median(v.map(x=>Math.abs(x-m)))||0.001;
-}
-
-function autoPeakEstimate(arr,fps){
- if(arr.length<40)return null;
- const farr=medFilter(arr,5),v=farr.map(p=>p.y);
- const base=percentile(v,.50);
- const q95=percentile(v,.95),q99=percentile(v,.99);
- const mad=robustMAD(v);
- const prominence=Math.max(q95-base, 5*mad);
- const threshold=base + Math.max(4.5*mad, 0.55*(q99-base));
-
- // raw strong local maxima
- let raw=[];
- for(let i=2;i<v.length-2;i++){
-   const local=v[i]>=v[i-1]&&v[i]>=v[i+1]&&v[i]>=v[i-2]&&v[i]>=v[i+2];
-   if(local && v[i]>=threshold){
-     raw.push({t:farr[i].t,i,y:v[i],strength:(v[i]-base)/(mad||1)});
-   }
- }
- if(raw.length<2)return {rpm:null,events:raw,count:raw.length,prominence,threshold,base,farr};
-
- // infer likely period from strongest peaks only
- const strongest=[...raw].sort((a,b)=>b.y-a.y).slice(0,Math.min(20,raw.length)).sort((a,b)=>a.t-b.t);
- let diffs=[];
- for(let i=1;i<strongest.length;i++){
-   const d=strongest[i].t-strongest[i-1].t;
-   if(d>0.025)diffs.push(d);
- }
- if(!diffs.length)return {rpm:null,events:raw,count:raw.length,prominence,threshold,base,farr};
-
- // dominant spacing by robust clustering on pairwise adjacent differences
- const dmed=median(diffs);
- let filtered=diffs.filter(d=>d>=dmed*0.55&&d<=dmed*1.8);
- let periodSeed=filtered.length?median(filtered):dmed;
-
- // collapse multiple peaks within one cycle: keep strongest only
- const refractory=Math.max(0.025,periodSeed*0.55);
- let events=[];
- for(const p of raw){
-   if(!events.length){events.push(p);continue}
-   const last=events.at(-1);
-   if(p.t-last.t<refractory){
-     if(p.y>last.y)events[events.length-1]=p;
-   }else events.push(p);
- }
-
- if(events.length<2)return {rpm:null,events,count:events.length,prominence,threshold,base,farr};
-
- let periods=[];
- for(let i=1;i<events.length;i++){
-   const d=events[i].t-events[i-1].t;
-   if(d>0.025)periods.push(d);
- }
- if(!periods.length)return {rpm:null,events,count:events.length,prominence,threshold,base,farr};
-
- const med=median(periods);
- const good=periods.filter(d=>Math.abs(d-med)/med<0.25);
- if(!good.length)return {rpm:null,events,count:events.length,prominence,threshold,base,farr};
-
- const period=mean(good);
- let rpm=60/period;
- const safeMax=fps?fps*60/2.5:1200;
- if(rpm>safeMax)return {rpm:null,alias:true,events,count:events.length,prominence,threshold,base,farr,period};
-
- return {rpm,events,count:events.length,prominence,threshold,base,farr,period};
-}
-
-function fftEstimate(arr,fps){
- if(arr.length<128)return null;
- const span=arr.at(-1).t-arr[0].t;if(span<=0)return null;
+function fftEstimate(arr,minRPM,maxRPM){
+ if(arr.length<64)return null;
+ const span=arr.at(-1).t-arr[0].t;
+ if(span<=0)return null;
  const fs=(arr.length-1)/span;
- let N=1<<Math.floor(Math.log2(Math.min(arr.length,512)));if(N<128)return null;
- let x=medFilter(arr.slice(-N),5).map(p=>p.y);
- const m=mean(x);x=x.map(v=>v-m);
+
+ let N=1<<Math.floor(Math.log2(Math.min(arr.length,512)));
+ if(N<64)return null;
+
+ let x=medFilter(arr.slice(-N),3).map(p=>p.y);
+ const m=mean(x);
+ x=x.map(v=>v-m);
+
  for(let i=0;i<N;i++)x[i]*=(.5-.5*Math.cos(2*Math.PI*i/(N-1)));
 
- const minHz=Math.max(0.12,1/(span*0.9));
- const maxHz=Math.min(fs/2.5,24);
- let k0=Math.max(1,Math.ceil(minHz*N/fs)),k1=Math.min(Math.floor(maxHz*N/fs),N/2-2);
+ const minHz=minRPM/60;
+ const maxHz=Math.min(maxRPM/60,fs/2.2);
+ let k0=Math.max(1,Math.ceil(minHz*N/fs));
+ let k1=Math.min(Math.floor(maxHz*N/fs),N/2-2);
  if(k1<=k0)return null;
 
  let mags=[],bk=0,bm=-1;
  for(let k=k0;k<=k1;k++){
   let re=0,im=0;
-  for(let n=0;n<N;n++){const a=2*Math.PI*k*n/N;re+=x[n]*Math.cos(a);im-=x[n]*Math.sin(a)}
-  const q=re*re+im*im;mags[k]=q;if(q>bm){bm=q;bk=k}
+  for(let n=0;n<N;n++){
+   const a=2*Math.PI*k*n/N;
+   re+=x[n]*Math.cos(a);
+   im-=x[n]*Math.sin(a);
+  }
+  const q=re*re+im*im;
+  mags[k]=q;
+  if(q>bm){bm=q;bk=k}
  }
+
  if(!bk)return null;
  let kr=bk;
  if(bk>k0&&bk<k1){
-  const a=mags[bk-1]||0,b=mags[bk]||0,c=mags[bk+1]||0,den=a-2*b+c;
+  const a=mags[bk-1]||0,b=mags[bk]||0,c=mags[bk+1]||0;
+  const den=a-2*b+c;
   if(Math.abs(den)>1e-12)kr=bk+clamp(.5*(a-c)/den,-.5,.5);
  }
- return {rpm:kr*fs/N*60};
+
+ return {rpm:kr*fs/N*60,fs};
 }
 
-function acEstimate(arr,fps){
- if(arr.length<80)return null;
- const span=arr.at(-1).t-arr[0].t;if(span<=0)return null;
+function acEstimate(arr,minRPM,maxRPM){
+ if(arr.length<40)return null;
+ const span=arr.at(-1).t-arr[0].t;
+ if(span<=0)return null;
  const fs=(arr.length-1)/span;
- let x=medFilter(arr,5).map(p=>p.y),m=mean(x);x=x.map(v=>v-m);
 
- const minLag=2;
- const maxLag=Math.min(Math.floor(x.length/2),Math.floor(fs*8)); // down to ~7.5 rpm
+ let x=medFilter(arr,3).map(p=>p.y);
+ const m=mean(x);
+ x=x.map(v=>v-m);
+
+ const minLag=Math.max(2,Math.floor(fs*60/maxRPM));
+ const maxLag=Math.min(Math.floor(x.length/2),Math.ceil(fs*60/minRPM));
+ if(maxLag<=minLag)return null;
+
  let best=-2,bl=0;
  for(let lag=minLag;lag<=maxLag;lag++){
   let num=0,a=0,b=0;
-  for(let i=lag;i<x.length;i++){num+=x[i]*x[i-lag];a+=x[i]*x[i];b+=x[i-lag]*x[i-lag]}
-  const r=num/Math.sqrt((a||1)*(b||1));if(r>best){best=r;bl=lag}
+  for(let i=lag;i<x.length;i++){
+   num+=x[i]*x[i-lag];
+   a+=x[i]*x[i];
+   b+=x[i-lag]*x[i-lag];
+  }
+  const r=num/Math.sqrt((a||1)*(b||1));
+  if(r>best){best=r;bl=lag}
  }
- if(!bl)return null;
- const rpm=60*fs/bl;
- const safeMax=fps?fps*60/2.5:1200;
- return rpm<=safeMax?{rpm,score:best}:null;
+
+ return bl?{rpm:60*fs/bl,score:best}:null;
+}
+
+function spectralConsensus(f,a){
+ const fr=f?.rpm,ar=a?.rpm;
+ if(!fr&&!ar)return null;
+ if(fr&&ar){
+  const d=Math.abs(fr-ar);
+  const tol=Math.max(3,0.06*((fr+ar)/2));
+  if(d<=tol)return (fr+ar)/2;
+  return fr; // FFT優先
+ }
+ return fr||ar;
+}
+
+function adaptivePeakEstimate(arr,minRPM,maxRPM,guideRPM){
+ if(arr.length<20)return null;
+
+ const farr=medFilter(arr,3);
+ const v=farr.map(p=>p.y);
+ const fs=(arr.length-1)/(arr.at(-1).t-arr[0].t);
+
+ const base=percentile(v,.30);
+ const upper=percentile(v,.95);
+ const span=Math.max(1,upper-base);
+ const noise=Math.max(0.5,1.4826*mad(v));
+
+ let expectedPeriod=guideRPM?60/guideRPM:null;
+ const minPeriod=60/maxRPM;
+ const maxPeriod=60/minRPM;
+
+ // Local prominence threshold intentionally low enough to retain alternating weak peaks.
+ const weakProm=Math.max(noise*1.7,span*0.055);
+ const strongProm=Math.max(noise*3.0,span*0.18);
+
+ const localWindowSec=expectedPeriod
+   ?clamp(expectedPeriod*.32,0.06,0.60)
+   :clamp(minPeriod*.45,0.05,0.60);
+ const hw=Math.max(2,Math.round(localWindowSec*fs));
+
+ let raw=[];
+ for(let i=2;i<v.length-2;i++){
+  if(!(v[i]>=v[i-1]&&v[i]>=v[i+1]))continue;
+
+  let left=[];
+  let right=[];
+  for(let j=Math.max(0,i-hw);j<i;j++)left.push(v[j]);
+  for(let j=i+1;j<=Math.min(v.length-1,i+hw);j++)right.push(v[j]);
+  if(!left.length||!right.length)continue;
+
+  const localBase=Math.max(percentile(left,.25),percentile(right,.25));
+  const prom=v[i]-localBase;
+
+  if(prom>=weakProm){
+   raw.push({
+    t:farr[i].t,
+    i,
+    y:v[i],
+    prom,
+    kind:prom>=strongProm?'strong':'weak'
+   });
+  }
+ }
+
+ if(!raw.length){
+  return {rpm:null,events:[],strong:0,weak:0,meanProm:0,farr,guideRPM};
+ }
+
+ // Spectral-guided non-maximum suppression:
+ // when guide exists, allow events down to ~45% of expected period to recover alternating weak peaks.
+ const minGap=expectedPeriod
+   ?expectedPeriod*.45
+   :minPeriod*.55;
+
+ let events=[];
+ for(const e of raw){
+  if(!events.length){
+   events.push(e);
+   continue;
+  }
+  const dt=e.t-events.at(-1).t;
+
+  if(dt>=minGap){
+   events.push(e);
+  }else if(e.prom>events.at(-1).prom){
+   // same physical peak: retain more prominent candidate
+   events[events.length-1]=e;
+  }
+ }
+
+ // If guide exists, reject implausible intervals and actively fill alternating weak peaks.
+ let periods=[];
+ if(events.length>=2){
+  for(let i=1;i<events.length;i++){
+   const dt=events[i].t-events[i-1].t;
+   if(expectedPeriod){
+    if(dt>=expectedPeriod*.55&&dt<=expectedPeriod*1.45)periods.push(dt);
+   }else{
+    if(dt>=minPeriod*.75&&dt<=maxPeriod*1.25)periods.push(dt);
+   }
+  }
+ }
+
+ let rpm=null,period=null;
+ if(periods.length){
+  const med=median(periods);
+  const good=periods.filter(x=>Math.abs(x-med)/med<.28);
+  if(good.length){
+   period=mean(good);
+   rpm=60/period;
+  }
+ }
+
+ const strong=events.filter(e=>e.kind==='strong').length;
+ const weak=events.filter(e=>e.kind==='weak').length;
+ const meanProm=events.length?mean(events.map(e=>e.prom)):0;
+
+ return {rpm,period,events,strong,weak,meanProm,farr,guideRPM};
+}
+
+function harmonicFix(peakRPM,spectralRPM){
+ if(!peakRPM||!spectralRPM)return {rpm:peakRPM,ratio:null,corrected:false};
+
+ const ratio=spectralRPM/peakRPM;
+
+ // classic missed-alternate-peak condition:
+ // peak method approximately 1/2 spectral period.
+ if(ratio>=1.75&&ratio<=2.25){
+  return {rpm:spectralRPM,ratio,corrected:true,type:'2x'};
+ }
+
+ // also handle accidental double-counting.
+ if(ratio>=0.44&&ratio<=0.57){
+  return {rpm:spectralRPM,ratio,corrected:true,type:'0.5x'};
+ }
+
+ return {rpm:peakRPM,ratio,corrected:false};
 }
 
 function draw(arr,p){
- gx.clearRect(0,0,sig.width,sig.height);if(arr.length<2)return;
- const farr=p?.farr||medFilter(arr,5),v=farr.map(x=>x.y);
- let mn=percentile(v,.02),mx=percentile(v,.995);if(mx-mn<1)mx=mn+1;
+ gx.clearRect(0,0,sig.width,sig.height);
+ if(arr.length<2)return;
+
+ const farr=p?.farr||medFilter(arr,3);
+ const v=farr.map(x=>x.y);
+
+ let mn=percentile(v,.02),mx=percentile(v,.98);
+ if(mx-mn<1)mx=mn+1;
+
  gx.beginPath();
  farr.forEach((pt,i)=>{
-  const x=i/(farr.length-1)*sig.width,y=sig.height-(clamp(pt.y,mn,mx)-mn)/(mx-mn)*sig.height;
-  i?gx.lineTo(x,y):gx.moveTo(x,y)
+  const x=i/(farr.length-1)*sig.width;
+  const y=sig.height-(clamp(pt.y,mn,mx)-mn)/(mx-mn)*sig.height;
+  i?gx.lineTo(x,y):gx.moveTo(x,y);
  });
- gx.strokeStyle='#fff';gx.lineWidth=2;gx.stroke();
+ gx.strokeStyle='#fff';
+ gx.lineWidth=2;
+ gx.stroke();
 
- if(p?.threshold){
-  const y=sig.height-(clamp(p.threshold,mn,mx)-mn)/(mx-mn)*sig.height;
-  gx.beginPath();gx.moveTo(0,y);gx.lineTo(sig.width,y);gx.strokeStyle='#ffd966';gx.lineWidth=1;gx.stroke();
- }
  if(p?.events){
-  gx.strokeStyle='#ff7070';gx.lineWidth=2;
   for(const e of p.events){
    const x=e.i/(farr.length-1)*sig.width;
-   gx.beginPath();gx.moveTo(x,0);gx.lineTo(x,24);gx.stroke();
+   gx.strokeStyle=e.kind==='strong'?'#ff6464':'#ffad4d';
+   gx.lineWidth=2;
+   gx.beginPath();
+   gx.moveTo(x,0);
+   gx.lineTo(x,e.kind==='strong'?24:14);
+   gx.stroke();
   }
  }
 }
 
 function analyze(){
  if(samples.length<2)return;
+
+ const minRPM=Math.max(1,+$('minRPM').value||10);
+ const maxRPM=Math.max(minRPM+1,+$('maxRPM').value||200);
+ const windowSec=Math.max(3,+$('win').value||8);
+
  const now=samples.at(-1).t;
- const spanKeep=Math.min(20,Math.max(8,now-samples[0].t));
- const arr=samples.filter(p=>now-p.t<=spanKeep);
- const fps=tickTimes.length>1?(tickTimes.length-1)/((tickTimes.at(-1)-tickTimes[0])/1000):0;
+ const arr=samples.filter(p=>now-p.t<=windowSec);
 
- const p=autoPeakEstimate(arr,fps);
- const f=fftEstimate(arr,fps);
- const a=acEstimate(arr,fps);
- const pr=p?.rpm,fr=f?.rpm,ar=a?.rpm;
+ const fps=tickTimes.length>1
+  ?(tickTimes.length-1)/((tickTimes.at(-1)-tickTimes[0])/1000)
+  :0;
 
- let display=null,mode='等待足夠週期';
- if(pr){
-   display=pr;
-   let checks=[fr,ar].filter(v=>v&&isFinite(v));
-   if(checks.length){
-     const nearest=checks.sort((x,y)=>Math.abs(x-pr)-Math.abs(y-pr))[0];
-     const err=Math.abs(nearest-pr);
-     mode=err<=Math.max(2,pr*0.02)?'PASS：AutoPeak + 驗證一致':`CHECK：驗證差 ${err.toFixed(1)} rpm`;
-   }else mode='AutoPeak 有效，等待驗證';
- }else if(p?.alias){
-   mode='超過 HTML 可信上限 / 疑似混疊';
+ const f=fftEstimate(arr,minRPM,maxRPM);
+ const a=acEstimate(arr,minRPM,maxRPM);
+ const spectral=spectralConsensus(f,a);
+
+ const p=adaptivePeakEstimate(arr,minRPM,maxRPM,spectral);
+ const h=harmonicFix(p?.rpm,spectral);
+
+ let finalRPM=null;
+ let mode='等待穩定訊號';
+
+ // Decision hierarchy:
+ // 1) FFT + AC agree -> spectral consensus has priority.
+ // 2) adaptive peak agrees -> average all.
+ // 3) half-frequency peak -> harmonic correction.
+ if(f?.rpm&&a?.rpm){
+  const specDiff=Math.abs(f.rpm-a.rpm);
+  const specTol=Math.max(3,0.06*((f.rpm+a.rpm)/2));
+
+  if(specDiff<=specTol){
+   if(p?.rpm){
+    const pd=Math.abs(p.rpm-spectral);
+
+    if(pd<=Math.max(3,spectral*.06)){
+     finalRPM=(p.rpm+f.rpm+a.rpm)/3;
+     mode='PASS：三法一致';
+    }else if(h.corrected){
+     finalRPM=spectral;
+     mode='HARMONIC FIX：補抓弱峰 / 修正 1/2 倍頻';
+    }else{
+     finalRPM=spectral;
+     mode='PASS：FFT + AutoCorr 一致，採頻域結果';
+    }
+   }else{
+    finalRPM=spectral;
+    mode='PASS：FFT + AutoCorr 一致';
+   }
+  }else if(p?.rpm){
+   finalRPM=p.rpm;
+   mode='CHECK：頻域不一致，暫採 Peak';
+  }
+ }else if(p?.rpm&&spectral){
+  if(h.corrected){
+   finalRPM=spectral;
+   mode='HARMONIC FIX：Peak 為半頻';
+  }else{
+   finalRPM=(p.rpm+spectral)/2;
+   mode='CHECK：Peak + 單一頻域';
+  }
+ }else if(p?.rpm){
+  finalRPM=p.rpm;
+  mode='暫估：Adaptive Peak';
+ }else if(spectral){
+  finalRPM=spectral;
+  mode='暫估：Spectral';
  }
 
- $('rpm').textContent=display?display.toFixed(display<100?1:0):'--';
+ $('rpm').textContent=finalRPM?finalRPM.toFixed(1):'--';
  $('rpmMode').textContent=mode;
- $('peakRpm').textContent=pr?pr.toFixed(pr<100?1:0):'--';
- $('fftRpm').textContent=fr?fr.toFixed(fr<100?1:0):'--';
- $('acRpm').textContent=ar?ar.toFixed(ar<100?1:0):'--';
+ $('peakRpm').textContent=p?.rpm?p.rpm.toFixed(1):'--';
+ $('fftRpm').textContent=f?.rpm?f.rpm.toFixed(1):'--';
+ $('acRpm').textContent=a?.rpm?a.rpm.toFixed(1):'--';
  $('fps').textContent=fps?fps.toFixed(1):'--';
- $('prom').textContent=p?.prominence?p.prominence.toFixed(1):'--';
- $('promState').textContent=(p?.prominence||0)>=8?'STRONG':(p?.prominence||0)>=3?'MEDIUM':'LOW';
- $('peakCount').textContent=p?.count??0;
- $('safeLimit').textContent=fps?Math.floor(fps*60/2.5):'--';
+ $('peakCounts').textContent=p?`${p.strong} / ${p.weak}`:'--';
+ $('harmonicRatio').textContent=h.ratio?h.ratio.toFixed(2):'--';
+ $('prom').textContent=p?.meanProm?p.meanProm.toFixed(1):'--';
+ $('promState').textContent=p?.weak>0?'WEAK PEAKS FOUND':'--';
 
- const obs=arr.length>1?arr.at(-1).t-arr[0].t:0;
  $('debug').textContent=
-`Sampling FPS: ${fps.toFixed(2)}
-Observation window: ${obs.toFixed(1)} s
+`RPM range: ${minRPM}–${maxRPM}
+Sampling FPS: ${fps.toFixed(2)}
+Window: ${windowSec.toFixed(1)} s
 Samples: ${arr.length}
-Peak prominence: ${p?.prominence?.toFixed(2) ?? '--'}
-Strong peaks: ${p?.count ?? 0}
-AutoPeak period: ${p?.period?.toFixed(3) ?? '--'} s
-AutoPeak RPM: ${pr?.toFixed(2) ?? '--'}
-FFT RPM: ${fr?.toFixed(2) ?? '--'}
-AutoCorr RPM: ${ar?.toFixed(2) ?? '--'}
-HTML trusted max: ${fps?Math.floor(fps*60/2.5):'--'} rpm
-Alias warning: ${p?.alias?'YES':'NO'}`;
+
+Strong peaks: ${p?.strong ?? 0}
+Weak peaks: ${p?.weak ?? 0}
+Adaptive Peak RPM: ${p?.rpm?.toFixed(2) ?? '--'}
+Peak period: ${p?.period?.toFixed(4) ?? '--'} s
+Mean prominence: ${p?.meanProm?.toFixed(2) ?? '--'}
+
+FFT RPM: ${f?.rpm?.toFixed(2) ?? '--'}
+AutoCorr RPM: ${a?.rpm?.toFixed(2) ?? '--'}
+Spectral consensus: ${spectral?.toFixed(2) ?? '--'}
+
+Spectral / Peak ratio: ${h.ratio?.toFixed(3) ?? '--'}
+Harmonic corrected: ${h.corrected ? 'YES ('+h.type+')' : 'NO'}
+
+Final RPM: ${finalRPM?.toFixed(2) ?? '--'}
+Mode: ${mode}`;
 
  draw(arr,p);
 }
 
 function loop(ts,gen){
  if(!running||gen!==loopGeneration)return;
+
  if(!lastSamplePerf||ts-lastSamplePerf>=12){
   lastSamplePerf=ts;
+
   const y=readROI();
   if(y!==null){
    const t=performance.now()/1000;
    samples.push({t,y});
-   samples=samples.filter(p=>t-p.t<=22);
+
+   const keep=Math.max(35,(+$('win').value||8)+5);
+   samples=samples.filter(p=>t-p.t<=keep);
+
    tickTimes.push(performance.now());
    tickTimes=tickTimes.filter(x=>performance.now()-x<3000);
+
    analyze();
   }
  }
+
  requestAnimationFrame(n=>loop(n,gen));
 }
 </script>
